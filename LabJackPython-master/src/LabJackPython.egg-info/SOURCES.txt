@@ -1,0 +1,13 @@
+README
+setup.cfg
+setup.py
+src/LabJackPython.py
+src/Modbus.py
+src/u12.py
+src/u3.py
+src/u6.py
+src/ue9.py
+src/LabJackPython.egg-info/PKG-INFO
+src/LabJackPython.egg-info/SOURCES.txt
+src/LabJackPython.egg-info/dependency_links.txt
+src/LabJackPython.egg-info/top_level.txt
