@@ -52,7 +52,7 @@ d.streamConfig(NumChannels=1, PChannels=[0], NChannels=[31], Resolution=3, ScanF
 # U6
 # Uncomment these lines to stream from a U6
 ###############################################################################
-'''
+
 # At high frequencies ( >5 kHz), the number of samples will be MAX_REQUESTS
 # times 48 (packets per request) times 25 (samples per packet)
 d = u6.U6()
@@ -62,7 +62,7 @@ d.getCalibrationData()
 
 print("Configuring U6 stream")
 d.streamConfig(NumChannels=1, ChannelNumbers=[0], ChannelOptions=[0], SettlingFactor=1, ResolutionIndex=1, ScanFrequency=SCAN_FREQUENCY)
-'''
+
 
 ###############################################################################
 # UE9

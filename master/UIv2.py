@@ -22,8 +22,7 @@ try:
     import u6
     import u3
 except:
-    pass
-    # tkMessageBox.showerror("Driver error", '''The driver could not be imported.
+    tkMessageBox.showerror("Driver error", '''The driver could not be imported.
 # Please install the UD driver (Windows) or Exodriver (Linux and Mac OS X) from www.labjack.com''')
 
 # Define main class that will contain all UI elements, threading control, etc. Going to store pretty much everything in self, so it should be available whenever threads update.
