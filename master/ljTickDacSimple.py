@@ -5,8 +5,8 @@ Demonstrates using an LJTick-DAC with the LabJackPython modules.
 import struct
 
 import u3
-# import u6
-# import ue9
+import u6
+import ue9
 
 
 class LJTickDAC:
@@ -68,3 +68,56 @@ class LJTickDAC:
         self.device.i2c(LJTickDAC.DAC_ADDRESS,
                         [49, binaryB // 256, binaryB % 256],
                         SDAPinNum=self.sdaPin, SCLPinNum=self.sclPin)
+
+
+def openFirstFound():
+    """Opens first found LabJack U6, U3 or UE9. Returns the device object on
+    success or None if not found.
+    """
+    devices = [u6.U6, u3.U3, ue9.UE9]
+    for device in devices:
+        try:
+            # Open the LabJack device
+            return device()
+        except:
+            pass
+    return None
+
+
+# Open first found LabJack U6, U3 or UE9
+dev = openFirstFound()
+if dev is None:
+    print("Unable to find or open a LabJack.")
+    exit()
+else:
+    deviceTypes = {6: "U6", 3: "U3", 9: "UE9"}
+    print("Found and opened a %s with serial # %s" %
+          (deviceTypes[dev.devType], dev.serialNumber))
+
+# dev = u3.U3()  # Typical way to open a first found U3
+# dev = u6.U6()  # Typical way to open a first found U6
+# dev = ue9.UE9()  # Typical way to open a first found UE9
+dev.getCalibrationData()
+
+# Set LJTick-DAC voltages
+if dev.devType == 3:
+    # For the U3, LJTick-DAC connected to FIO4 and FIO5.
+    dioPin = 4
+    # Configure FIO0 to FIO4 as analog inputs, and FIO04 to FIO7 as digital I/O.
+    dev.configIO(FIOAnalog=0x0F)
+else:
+    # For the U6 and UE9, LJTick-DAC connected to FIO0 and FIO1.
+    dioPin = 0
+tdac = LJTickDAC(dev, dioPin)
+dacA = 2.2
+dacB = 3.3
+tdac.update(dacA, dacB)
+print("DACA and DACB set to %.5f V and %.5f V" % (dacA, dacB))
+
+# Read voltage from AIN0
+ainChan = 0
+volt = dev.getAIN(ainChan)
+print("AIN%s voltage = %.5f V" % (ainChan, volt))
+
+# Close the device
+dev.close()

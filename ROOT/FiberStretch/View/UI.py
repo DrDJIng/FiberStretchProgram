@@ -8,11 +8,14 @@ from matplotlib.backends.backend_tkagg import ( FigureCanvasTkAgg, NavigationToo
 from matplotlib.backend_bases import key_press_handler
 from .buttonFuncs import ButtonFunctions as BF
 
-class MainUI():
+class MainUI:
 
     # Define the initialisation, which will initiate all GUI elements
     def __init__(self):
-        self.data += 1
+        self.startUI()
+
+    def startUI(self):
+        # Set up UI system.
         self.root = Tk()
         self.root.title("Force measurements")
         Grid.rowconfigure(self.root, 0, weight = 1)
@@ -45,7 +48,7 @@ class MainUI():
         self.signalButton.grid(column = 2, row = 0)
         self.startButton = ttk.Button(self.signalFrame, text = 'Start measuring', command = lambda : BF.startButton(self))
         self.startButton.grid(column = 2, row = 1, pady = 10)
-        self.stopButton = ttk.Button(self.signalFrame, text = 'Stop measuring', command = BF.stopButton)
+        self.stopButton = ttk.Button(self.signalFrame, text = 'Stop measuring', command = lambda : BF.stopButton(self))
         self.stopButton.grid(column = 2, row = 2, pady = 10)
 
         # Stage buttons
@@ -82,25 +85,8 @@ class MainUI():
         self.canvas.draw() # Draw the canvas.
 
         # Start mainloop, which activates the window
-        self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.mainloop()
-
-    # A close function, to stop any active threads in the proper way, close the device, and close the window.
-    def close(self):
-        # self.device.close()
-        try:
-            if self.thread is not None:
-                self.thread.stop()
-                self.thread.join()
-                print("Threads closed.")
-            if self.device is not None:
-                self.device.close()
-                print("Device closed.")
-        except:
-            print("Thanks for using!")
-        finally:
-            self.root.quit()
-            self.root.destroy()
+        return self
 
 if __name__ == '__main__':
     MainUI()
