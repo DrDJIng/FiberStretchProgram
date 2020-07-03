@@ -34,10 +34,11 @@ class MainUI:
     DAC_ADDRESS = 0x12
     # Define the initialisation, which will initiate all GUI elements
     def __init__(self):
+        print(os.path.dirname(os.path.realpath(__file__)))
         # LOAD CALIBRATION FROM FILE
         self.forceCalibration = 1
         # Set scan frequency to 2x double what we want actual frequency to be at. Could probably do this non-stream, but two channels at 100Hz feels like a streaming problem to me.  Attach to an editable field at some point.
-        self.SCAN_FREQUENCY = 2000
+        self.SCAN_FREQUENCY = 4000
         global initCheck
         global lastInd
         global shouldPlotContinue
@@ -57,7 +58,8 @@ class MainUI:
         dioPin = 4
         # Configure FIO0 to FIO4 as analog inputs, and FIO04 to FIO7 as digital I/O.
         self.U3device.configIO(FIOAnalog=0x0F)
-
+        self.DACnumbers = {'DACA': 48,
+                               'DACB': 49}
 
         self.sclPin = dioPin
         self.sdaPin = self.sclPin + 1
@@ -154,7 +156,11 @@ class MainUI:
         self.plotFig.set_tight_layout(True) # Get rid of that annoying whitespace.
         self.canvas = FigureCanvasTkAgg(self.plotFig, self.plottingFrame) # Tell TKinter which frame to put the canvas into
         self.canvas.get_tk_widget().grid(row = 0, column = 0, sticky = (N, S, E, W)) # Assign grid coordinates within the previous frame
+        self.toolbarFrame = ttk.Frame(self.plottingFrame)
+        self.toolbarFrame.grid(column = 0, row = 1)
+        self.canvasNav = NavigationToolbar2Tk(self.canvas, self.toolbarFrame)
         self.canvas.draw() # Draw the canvas.
+        self.canvasNav.update()
 
         # Start mainloop, which activates the window
         self.root.protocol("WM_DELETE_WINDOW", self.close)
@@ -243,7 +249,7 @@ class MainUI:
         print("Configuring U6 stream")
 
         # Set up the stream from Labjack U6
-        self.U6device.streamConfig(NumChannels=2, ChannelNumbers=[0, 1], ChannelOptions=[0, 0], SettlingFactor=1, ResolutionIndex=3, ScanFrequency=self.SCAN_FREQUENCY)
+        self.U6device.streamConfig(NumChannels=2, ChannelNumbers=[0, 1], ChannelOptions=[0, 0], SettlingFactor=1, ResolutionIndex=4, ScanFrequency=self.SCAN_FREQUENCY)
         while streamStopper == 0:
             print("Start stream")
             self.U6device.streamStart()
@@ -306,18 +312,30 @@ class MainUI:
 
     # Function to send signal to the motors, generalised such that it can send a signal to either the stage motor (SM) or force motor (FM).
     def sendSignal(self):
+        # Set voltages, then after sleep, reset to 0.
         # NEED TO ADD CONVERSION FROM/TO mm HERE. WHAT V = WHAT mm?
-        maxValue = 10
+        CONST_YELLOW = 5
+        PULSE_HEIGHT = 3 # eventually needs to be lengthChange * self.LengthToVolts
+        PULSE_LENGTH = 5
         nSteps = int(self.nRises.get())
         stepNum = 1
 
-        while stepNum <= nSteps:
-            currentValue = stepNum * maxValue / nSteps
-            self.setVoltage(currentValue)
-            stepNum += 1
-            time.sleep(3)
+        self.setVoltage(CONST_YELLOW, 'DACB')
 
-        self.setVoltage(0)
+        time.sleep(0.001)
+
+        while stepNum <= nSteps:
+            currentValue = stepNum * PULSE_HEIGHT / nSteps
+            self.setVoltage(currentValue, 'DACA')
+            time.sleep(PULSE_LENGTH)
+            self.setVoltage(0, 'DACA')
+            stepNum += 1
+
+        self.setVoltage(-PULSE_HEIGHT, 'DACA')
+        time.sleep(0.02)
+        self.setVoltage(0, 'DACA')
+        self.setVoltage(0, 'DACB')
+
 
         # Create sine wave generator
         # t = 0
@@ -337,11 +355,12 @@ class MainUI:
     # Finally, an export function to write the data from streaming to the disk.
     def exportData(self):
         outputArray = zip(self.forceData, self.lengthData)
-        if not os.path.exists('outputs'):
-                os.makedirs('outputs')
-        with open("outputs/output.csv", "w", newline = "") as f:
+        if not os.path.exists('./outputs'):
+                os.makedirs('./outputs')
+        with open("./outputs/output.csv", "w", newline = "") as f:
             writer = csv.writer(f)
             writer.writerows(outputArray)
+            f.flush()
 
     # Need a function to set the calibration of the voltages we're getting from the force transducer.
     def setCalibration(self):
@@ -378,11 +397,11 @@ class MainUI:
         right, left = struct.unpack("<Ii", struct.pack("B" * 8, *buff[0:8]))
         return float(left) + float(right)/(2**32)
 
-    def setVoltage(self, value):
+    def setVoltage(self, value, DACPORT):
 
         binaryA = int(value*self.slopeA + self.offsetA)
         self.U3device.i2c(MainUI.DAC_ADDRESS,
-                        [48, binaryA // 256, binaryA % 256],
+                        [self.DACnumbers[DACPORT], binaryA // 256, binaryA % 256],
                         SDAPinNum=self.sdaPin, SCLPinNum=self.sclPin)
 
     # A close function, to stop any active threads in the proper way, close the device, and close the window.
