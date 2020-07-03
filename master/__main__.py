@@ -2,6 +2,8 @@ import math  # For sin
 import struct
 import sys  # For version_info and platform
 import time  # For sleep, clock, time and perf_counter
+import os
+import csv
 from datetime import datetime  # For printing times with now
 import scipy
 from functools import partial
@@ -32,6 +34,10 @@ class MainUI:
     DAC_ADDRESS = 0x12
     # Define the initialisation, which will initiate all GUI elements
     def __init__(self):
+        # LOAD CALIBRATION FROM FILE
+        self.forceCalibration = 1
+        # Set scan frequency to 2x double what we want actual frequency to be at. Could probably do this non-stream, but two channels at 100Hz feels like a streaming problem to me.  Attach to an editable field at some point.
+        self.SCAN_FREQUENCY = 2000
         global initCheck
         global lastInd
         global shouldPlotContinue
@@ -78,6 +84,9 @@ class MainUI:
         self.root.title("Force measurements")
         Grid.rowconfigure(self.root, 0, weight = 1)
         Grid.columnconfigure(self.root, 0, weight = 1)
+        numRises = StringVar()
+        calWeight = StringVar()
+        calForce = StringVar()
 
         self.mainFrame = ttk.Frame(self.root, borderwidth=5, relief="sunken")
         self.mainFrame.grid(column = 0, row = 0, sticky = (N, S, E, W))
@@ -97,7 +106,6 @@ class MainUI:
         # Signal options
         self.raisesLabel = ttk.Label(self.signalFrame, text = 'Number of voltage raises')
         self.raisesLabel.grid(column = 0, row = 1)
-        numRises = StringVar()
         self.nRises = ttk.Entry(self.signalFrame, textvariable = numRises)
         self.nRises.grid(column = 1, row = 1)
         self.nRises.insert(0, '1')
@@ -121,9 +129,15 @@ class MainUI:
         self.otherFrame = ttk.Frame(self.settingsFrame)
         self.otherFrame.grid(column = 2, row = 0)
         self.exportButton = ttk.Button(self.otherFrame, text = 'Export data', command = self.exportData)
-        self.exportButton.grid(column = 3, row = 0, pady = 10)
+        self.exportButton.grid(column = 0, row = 0, pady = 10)
         self.calibrateButton = ttk.Button(self.otherFrame, text = 'Calibrate', command = self.setCalibration)
-        self.calibrateButton.grid(column = 4, row = 0)
+        self.calibrateButton.grid(column = 1, row = 2)
+        self.calWeight = ttk.Entry(self.otherFrame, textvariable = calWeight)
+        self.calWeight.grid(column = 1, row = 0)
+        self.calWeight.insert(0, '3')
+        self.calForce = ttk.Entry(self.otherFrame, textvariable = calForce)
+        self.calForce.grid(column = 1, row = 1)
+        self.calForce.insert(0, '2')
 
 
         self.plottingFrame = ttk.Frame(self.mainFrame)
@@ -148,9 +162,11 @@ class MainUI:
 
     # Function to start a new threads
     def startNewThread(self, funcname):
+        global shouldPlotContinue
         if funcname == self.startStream:
             self.streamThread = threading.Thread(target = funcname)
             self.streamThread.start()
+            shouldPlotContinue = 1
             self.updateGraph()
         else:
             self.signalThread = threading.Thread(target = funcname)
@@ -160,6 +176,8 @@ class MainUI:
         global initCheck
         global lastInd
         global shouldPlotContinue
+
+        PLOT_LENGTH = round(self.SCAN_FREQUENCY / 2)
         if len(self.forceData) > 0:
             # Need to add in timer here for X-data, involves learning how to use Labjack timer
             self.forceAxis.clear()
@@ -168,26 +186,28 @@ class MainUI:
             self.lengthAxis.set_ylim([-11, 11])
 
             # Check to see if data has changed. Will need to come up with better way to do this if / when memory becomes an issue.
+            # I think I can do this using queueing, which I should implement. Also implement blitting for speed.
+            # There is a weird delay when re-initialising the graphing, need to hunt that down.
             if (self.forceData != self.checkDataF) or (self.lengthData != self.checkDataL):
                 if initCheck == 0:
                     initCheck = 1
-                    xlim = (np.arange(len(self.forceData)) + 1) * 1 / 200
+                    xlim = (np.arange(len(self.forceData)) + 1) * 1 / PLOT_LENGTH
                     self.forceAxis.plot(xlim, self.forceData, color='blue')
                     self.lengthAxis.plot(xlim, self.lengthData, color='blue')
                     self.forceAxis.set_xlim([xlim[0], xlim[-1]])
                     self.lengthAxis.set_xlim([xlim[0], xlim[-1]])
                     lastInd = xlim[-1]
                     print(lastInd)
-                    self.forceAxis.set_xticks((np.arange(len(self.forceData), step = 20) + 1) * 1 / 200)
-                    self.lengthAxis.set_xticks((np.arange(len(self.forceData), step = 20) + 1) * 1 / 200)
+                    self.forceAxis.set_xticks((np.arange(len(self.forceData), step = 20) + 1) * 1 / PLOT_LENGTH)
+                    self.lengthAxis.set_xticks((np.arange(len(self.forceData), step = 20) + 1) * 1 / PLOT_LENGTH)
                 else:
-                    xlim = lastInd + (np.arange(len(self.forceData[-200:])) + 1) * 1 / 200
-                    self.forceAxis.plot(xlim, self.forceData[-200:], color='blue')
-                    self.lengthAxis.plot(xlim, self.lengthData[-200:], color='blue')
+                    xlim = lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:])) + 1) * 1 / PLOT_LENGTH
+                    self.forceAxis.plot(xlim, self.forceData[-PLOT_LENGTH:], color='blue')
+                    self.lengthAxis.plot(xlim, self.lengthData[-PLOT_LENGTH:], color='blue')
                     self.forceAxis.set_xlim([xlim[0], xlim[-1]])
                     self.lengthAxis.set_xlim([xlim[0], xlim[-1]])
-                    self.forceAxis.set_xticks(lastInd + (np.arange(len(self.forceData[-200:]), step = 20) + 1) * 1 / 200)
-                    self.lengthAxis.set_xticks(lastInd + (np.arange(len(self.forceData[-200:]), step = 20) + 1) * 1 / 200)
+                    self.forceAxis.set_xticks(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:]), step = 20) + 1) * 1 / PLOT_LENGTH)
+                    self.lengthAxis.set_xticks(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:]), step = 20) + 1) * 1 / PLOT_LENGTH)
                     lastInd = xlim[-1]
 
                 self.canvas.draw()
@@ -200,14 +220,14 @@ class MainUI:
             self.lengthAxis.clear()
             self.forceAxis.set_ylim([-11, 11])
             self.lengthAxis.set_ylim([-11, 11])
-            xlim = (np.arange(len(self.forceData)) + 1) * 1 / 200
+            xlim = (np.arange(len(self.forceData)) + 1) * 1 / PLOT_LENGTH
             self.forceAxis.plot(xlim, self.forceData, color='blue')
             self.lengthAxis.plot(xlim, self.lengthData, color='blue')
             self.forceAxis.set_xlim([xlim[0], xlim[-1]])
             self.lengthAxis.set_xlim([xlim[0], xlim[-1]])
             stepper = round(len(self.forceData)/20)
-            self.forceAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / 200)
-            self.lengthAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1/ 200)
+            self.forceAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
+            self.lengthAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
             self.canvas.draw()
         elif shouldPlotContinue == 1:
             self.root.after(50, self.updateGraph)
@@ -222,11 +242,8 @@ class MainUI:
 
         print("Configuring U6 stream")
 
-        # Set scan frequency to 2x double what we want actual frequency to be at. Could probably do this non-stream, but two channels at 100Hz feels like a streaming problem to me.  Attach to an editable field at some point.
-        SCAN_FREQUENCY = 2000
-
         # Set up the stream from Labjack U6
-        self.U6device.streamConfig(NumChannels=2, ChannelNumbers=[0, 1], ChannelOptions=[0, 0], SettlingFactor=1, ResolutionIndex=3, ScanFrequency=SCAN_FREQUENCY)
+        self.U6device.streamConfig(NumChannels=2, ChannelNumbers=[0, 1], ChannelOptions=[0, 0], SettlingFactor=1, ResolutionIndex=3, ScanFrequency=self.SCAN_FREQUENCY)
         while streamStopper == 0:
             print("Start stream")
             self.U6device.streamStart()
@@ -257,8 +274,9 @@ class MainUI:
                     # Update y-axis data to plot, auto-axis should keep it within range
                     updateData = r["AIN0"]
                     # Append onto all data, for export later
-                    self.forceData = self.forceData + r["AIN0"]
+                    self.forceData = self.forceData + [self.forceCalibration * i for i in r["AIN0"]]
                     self.lengthData = self.lengthData + r["AIN1"]
+                    # self.signalData = self.signalData + r["AIN2"] # FOR SIGNAL DATA ACQUISITION
 
                     dataCount += 1
                     packetCount += r['numPackets']
@@ -284,51 +302,70 @@ class MainUI:
         plotCounter = 0 # Reset plot counter for accurate timing
         initCheck = 0 # Reset initial check for plotting
         shouldPlotContinue = 0 # Stop plotting
-        print(self.lengthData)
+        self.streamThread.join()
 
     # Function to send signal to the motors, generalised such that it can send a signal to either the stage motor (SM) or force motor (FM).
     def sendSignal(self):
-        # dacA = 2.2
-        # binaryA = int(dacA*self.slopeA + self.offsetA)
-        # self.U3device.i2c(MainUI.DAC_ADDRESS,
-        #                 [48, binaryA // 256, binaryA % 256],
-        #                 SDAPinNum=self.sdaPin, SCLPinNum=self.sclPin)
-        # time.sleep(0.01)
-        # dacA = -2.2
-        # binaryA = int(dacA*self.slopeA + self.offsetA)
-        # self.U3device.i2c(MainUI.DAC_ADDRESS,
-        #                 [48, binaryA // 256, binaryA % 256],
-        #                 SDAPinNum=self.sdaPin, SCLPinNum=self.sclPin)
+        # NEED TO ADD CONVERSION FROM/TO mm HERE. WHAT V = WHAT mm?
+        maxValue = 10
+        nSteps = int(self.nRises.get())
+        stepNum = 1
+
+        while stepNum <= nSteps:
+            currentValue = stepNum * maxValue / nSteps
+            self.setVoltage(currentValue)
+            stepNum += 1
+            time.sleep(3)
+
+        self.setVoltage(0)
 
         # Create sine wave generator
-        t = 0
-        step = 0.01
-        while t < 10:
-            t += step
-            value = 2*math.sin(math.pi * t)
-            print(value)
-            binaryA = int(value*self.slopeA + self.offsetA)
-            self.U3device.i2c(MainUI.DAC_ADDRESS, [48, binaryA // 256, binaryA % 256],
-                            SDAPinNum=self.sdaPin, SCLPinNum=self.sclPin)
-            time.sleep(0.02)
-        self.U3device.i2c(MainUI.DAC_ADDRESS, [48, 0 // 256, 0 % 256],
-                        SDAPinNum=self.sdaPin, SCLPinNum=self.sclPin)
+        # t = 0
+        # step = 0.01
+        # while t < 10:
+        #     t += step
+        #     value = 2*math.sin(math.pi * t)
+        #     print(value)
+        #     binaryA = int(value*self.slopeA + self.offsetA)
+        #     self.U3device.i2c(MainUI.DAC_ADDRESS, [48, binaryA // 256, binaryA % 256],
+        #                     SDAPinNum=self.sdaPin, SCLPinNum=self.sclPin)
+        #     time.sleep(0.02)
+        # self.U3device.i2c(MainUI.DAC_ADDRESS, [48, 0 // 256, 0 % 256],
+        #                 SDAPinNum=self.sdaPin, SCLPinNum=self.sclPin)
         return
 
     # Finally, an export function to write the data from streaming to the disk.
     def exportData(self):
-        print('Exporting data...')
+        outputArray = zip(self.forceData, self.lengthData)
+        if not os.path.exists('outputs'):
+                os.makedirs('outputs')
+        with open("outputs/output.csv", "w", newline = "") as f:
+            writer = csv.writer(f)
+            writer.writerows(outputArray)
 
     # Need a function to set the calibration of the voltages we're getting from the force transducer.
     def setCalibration(self):
-        print('Setting calibration...')
+        # IF CALIBRATION DOESN'T EXIST
+        POINT1 = [0,0]
+        y1 = POINT1[0]
+        x1 = POINT1[1]
 
-    # This function will set the motor strength
-    def setMotor(self):
-        pass
+        POINT2 = [int(self.calForce.get()), int(self.calWeight.get())]
+        y2 = POINT2[0]
+        x2 = POINT2[1]
+
+        self.forceCalibration = (y2-y1)/(x2-x1)
+
+        print('Setting calibration...')
 
     # This function will move the stage
     def moveStage(self, direction):
+
+        # NEED TO ADD CONVERSION FROM/TO mm HERE. WHAT V = WHAT mm?
+        self.setVoltage(direction)
+        time.sleep(0.001)
+        # NEED TO ADD CONVERSION FROM/TO mm HERE. WHAT V = WHAT mm?
+        self.setVoltage(0)
         if direction == 1:
             print('Moving stage forward')
         else:
@@ -337,10 +374,16 @@ class MainUI:
     def toDouble(self, buff):
         """Converts the 8 byte array into a floating point number.
         buff: An array with 8 bytes.
-
         """
         right, left = struct.unpack("<Ii", struct.pack("B" * 8, *buff[0:8]))
         return float(left) + float(right)/(2**32)
+
+    def setVoltage(self, value):
+
+        binaryA = int(value*self.slopeA + self.offsetA)
+        self.U3device.i2c(MainUI.DAC_ADDRESS,
+                        [48, binaryA // 256, binaryA % 256],
+                        SDAPinNum=self.sdaPin, SCLPinNum=self.sclPin)
 
     # A close function, to stop any active threads in the proper way, close the device, and close the window.
     def close(self):
