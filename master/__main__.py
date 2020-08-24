@@ -127,14 +127,14 @@ class MainUI:
 
         # Might need to move entire figure creation, etc, into the thread so that it can be accessed properly? Not sure.
         self.plotFig = Figure(figsize=(19.2, 7.2), dpi = 100) # Have to take into account the DPI to set the inch sizes here. 100 dpi = 19.2 inches for a typical 1920x1080 screen.
-        self.forceAxis = self.plotFig.add_subplot(4, 1, 1)
-        self.lengthAxis = self.plotFig.add_subplot(4, 1, 2)
-        self.signalAxis = self.plotFig.add_subplot(4, 1, 3)
-        self.otherAxis = self.plotFig.add_subplot(4, 1, 4)
+        self.forceAxis = self.plotFig.add_subplot(2, 1, 1)
+        self.lengthAxis = self.plotFig.add_subplot(2, 1, 2)
+        # self.signalAxis = self.plotFig.add_subplot(4, 1, 3)
+        # self.otherAxis = self.plotFig.add_subplot(4, 1, 4)
         self.forceAxis.set_ylim([-10, 10]) # Set the y-axis limits to -10 and 10, the range of the transducer (might actually be -5 to 5, need to check).
         self.lengthAxis.set_ylim([-10, 10])
-        self.signalAxis.set_ylim([-10, 10])
-        self.otherAxis.set_ylim([-10, 10])
+        # self.signalAxis.set_ylim([-10, 10])
+        # self.otherAxis.set_ylim([-10, 10])
         self.plotFig.set_tight_layout(True) # Get rid of that annoying whitespace.
         self.canvas = FigureCanvasTkAgg(self.plotFig, self.plottingFrame) # Tell TKinter which frame to put the canvas into
         self.canvas.get_tk_widget().grid(row = 0, column = 0, sticky = (N, S, E, W)) # Assign grid coordinates within the previous frame
@@ -170,12 +170,12 @@ class MainUI:
             # Need to add in timer here for X-data, involves learning how to use Labjack timer
             self.forceAxis.clear()
             self.lengthAxis.clear()
-            self.signalAxis.clear()
-            self.otherAxis.clear()
+            # self.signalAxis.clear()
+            # self.otherAxis.clear()
             self.forceAxis.set_ylim([-1, 6])
             self.lengthAxis.set_ylim([-1, 6])
-            self.signalAxis.set_ylim([-1, 6])
-            self.otherAxis.set_ylim([-1, 6])
+            # self.signalAxis.set_ylim([-1, 6])
+            # self.otherAxis.set_ylim([-1, 6])
 
             # Check to see if data has changed. Will need to come up with better way to do this if / when memory becomes an issue.
             # I think I can do this using queueing, which I should implement. Also implement blitting for speed.
@@ -185,8 +185,8 @@ class MainUI:
                     initCheck = 1
                     self.forceAxis.plot(self.forceData, color='blue')
                     self.lengthAxis.plot(self.lengthData, color='blue')
-                    self.signalAxis.plot(self.signalData, color='blue')
-                    self.otherAxis.plot(self.otherData, color='blue')
+                    # self.signalAxis.plot(self.signalData, color='blue')
+                    # self.otherAxis.plot(self.otherData, color='blue')
                     # fxlim = np.floor((np.arange(len(self.forceData)) + 1) * 1 / PLOT_LENGTH)
                     # lxlim = np.floor((np.arange(len(self.forceData) - 1) + 1) * 1 / PLOT_LENGTH)
                     # self.forceAxis.plot(fxlim, self.forceData, color='blue')
@@ -202,8 +202,8 @@ class MainUI:
                 else:
                     self.forceAxis.plot(self.forceData, color='blue')
                     self.lengthAxis.plot(self.lengthData, color='blue')
-                    self.signalAxis.plot(self.signalData, color='blue')
-                    self.otherAxis.plot(self.otherData, color='blue')
+                    # self.signalAxis.plot(self.signalData, color='blue')
+                    # self.otherAxis.plot(self.otherData, color='blue')
                     # xlim = np.floor(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:])) + 1) * 1 / PLOT_LENGTH)
                     # self.forceAxis.plot(xlim, self.forceData[-PLOT_LENGTH:], color='blue')
                     # self.lengthAxis.plot(xlim, self.lengthData[-PLOT_LENGTH:], color='blue')
@@ -287,9 +287,9 @@ class MainUI:
                     updateData = r["AIN0"]
                     # Append onto all data, for export later
                     self.forceData = self.forceData + [self.forceCalibration * i for i in r["AIN0"]]
-                    self.lengthData = self.lengthData + r["AIN2"]
-                    self.signalData = self.signalData + r["AIN1"]
-                    self.otherData = self.otherData + r["AIN3"]
+                    self.lengthData = self.lengthData + r["AIN1"]
+                    # self.signalData = self.signalData + r["AIN2"]
+                    # self.otherData = self.otherData + r["AIN3"]
                     # self.signalData = self.signalData + r["AIN2"] # FOR SIGNAL DATA ACQUISITION
 
                     dataCount += 1
@@ -326,26 +326,32 @@ class MainUI:
         CONST_YELLOW = 3.8
         STRETCH_LENGTH = 3 # eventually needs to be lengthChange * self.LengthToVolts
         PULSE_LENGTH = 3
-        PULSE_WAIT = 0.1
         nSteps = int(self.nRises.get())
         stepNum = 1
 
-        DAC0_VALUE = self.U3device.voltageToDACBits(STRETCH_LENGTH, dacNumber = 1, is16Bits = False)
+        DAC0_VALUE = self.U3device.voltageToDACBits(STRETCH_LENGTH/nSteps, dacNumber = 1, is16Bits = False)
         self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
+        time.sleep(0.1)
         DAC1_VALUE = self.U3device.voltageToDACBits(CONST_YELLOW, dacNumber = 1, is16Bits = False)
         self.U3device.getFeedback(u3.DAC1_8(DAC1_VALUE))
-        
-        time.sleep(PULSE_LENGTH)
-        while stepNum < nSteps:
-            currentValue = stepNum * STRETCH_LENGTH / nSteps
-            DAC0_VALUE = self.U3device.voltageToDACBits(currentValue, dacNumber = 1, is16Bits = False)
-            self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
-            time.sleep(PULSE_LENGTH)
-            stepNum += 1
+
+        while stepNum <= nSteps:
+            if stepNum == 1:
+                stepNum += 1
+                time.sleep(PULSE_LENGTH)
+            else:
+                currentValue = stepNum * STRETCH_LENGTH / nSteps
+                DAC0_VALUE = self.U3device.voltageToDACBits(currentValue, dacNumber = 1, is16Bits = False)
+                self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
+                time.sleep(PULSE_LENGTH)
+                stepNum += 1
 
 
         DAC1_VALUE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
         self.U3device.getFeedback(u3.DAC1_8(DAC1_VALUE))
+        time.sleep(0.1)
+        DAC0_VALUE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
+        self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
 
         # Create sine wave generator
         # t = 0
