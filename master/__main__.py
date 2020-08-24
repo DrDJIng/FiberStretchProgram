@@ -30,15 +30,13 @@ except:
 # Define main class that will contain all UI elements, threading control, etc. Going to store pretty much everything in self, so it should be available whenever threads update.
 # I will send any pertinent data through queue's though, to avoid the possibility of race conditions, which shouldn't be an issue with what I'm doing anyway.
 class MainUI:
-    EEPROM_ADDRESS = 0x50
-    DAC_ADDRESS = 0x12
     # Define the initialisation, which will initiate all GUI elements
     def __init__(self):
         print(os.path.dirname(os.path.realpath(__file__)))
         # LOAD CALIBRATION FROM FILE
         self.forceCalibration = 1
         # Set scan frequency to 2x double what we want actual frequency to be at. Could probably do this non-stream, but two channels at 100Hz feels like a streaming problem to me.  Attach to an editable field at some point.
-        self.SCAN_FREQUENCY = 4000
+        self.SCAN_FREQUENCY = 1000
         global initCheck
         global lastInd
         global shouldPlotContinue
@@ -48,6 +46,8 @@ class MainUI:
         # Initialise data in memory
         self.forceData = []
         self.lengthData = []
+        self.signalData = []
+        self.otherData = []
         self.checkDataF = []
         self.checkDataL = []
         self.U6device = u6.U6()
@@ -55,29 +55,7 @@ class MainUI:
         self.U3device = u3.U3()
         # For applying the proper calibration to readings.
         self.U3device.getCalibrationData()
-        dioPin = 4
-        # Configure FIO0 to FIO4 as analog inputs, and FIO04 to FIO7 as digital I/O.
-        self.U3device.configIO(FIOAnalog=0x0F)
-        self.DACnumbers = {'DACA': 48,
-                               'DACB': 49}
-
-        self.sclPin = dioPin
-        self.sdaPin = self.sclPin + 1
-
-        data = self.U3device.i2c(MainUI.EEPROM_ADDRESS, [64],
-                               NumI2CBytesToReceive=36, SDAPinNum=self.sdaPin,
-                               SCLPinNum=self.sclPin)
-        response = data['I2CBytes']
-        self.slopeA = self.toDouble(response[0:8])
-        self.offsetA = self.toDouble(response[8:16])
-        self.slopeB = self.toDouble(response[16:24])
-        self.offsetB = self.toDouble(response[24:32])
-
-        if 255 in response:
-            msg = "LJTick-DAC calibration constants seem off. Check that the " \
-                  "LJTick-DAC is connected properly."
-            raise Exception(msg)
-
+        # self.setLJTick()
         self.startUI()
 
     def startUI(self):
@@ -149,10 +127,14 @@ class MainUI:
 
         # Might need to move entire figure creation, etc, into the thread so that it can be accessed properly? Not sure.
         self.plotFig = Figure(figsize=(19.2, 7.2), dpi = 100) # Have to take into account the DPI to set the inch sizes here. 100 dpi = 19.2 inches for a typical 1920x1080 screen.
-        self.forceAxis = self.plotFig.add_subplot(2, 1, 1)
-        self.lengthAxis = self.plotFig.add_subplot(2, 1, 2)
+        self.forceAxis = self.plotFig.add_subplot(4, 1, 1)
+        self.lengthAxis = self.plotFig.add_subplot(4, 1, 2)
+        self.signalAxis = self.plotFig.add_subplot(4, 1, 3)
+        self.otherAxis = self.plotFig.add_subplot(4, 1, 4)
         self.forceAxis.set_ylim([-10, 10]) # Set the y-axis limits to -10 and 10, the range of the transducer (might actually be -5 to 5, need to check).
         self.lengthAxis.set_ylim([-10, 10])
+        self.signalAxis.set_ylim([-10, 10])
+        self.otherAxis.set_ylim([-10, 10])
         self.plotFig.set_tight_layout(True) # Get rid of that annoying whitespace.
         self.canvas = FigureCanvasTkAgg(self.plotFig, self.plottingFrame) # Tell TKinter which frame to put the canvas into
         self.canvas.get_tk_widget().grid(row = 0, column = 0, sticky = (N, S, E, W)) # Assign grid coordinates within the previous frame
@@ -188,8 +170,12 @@ class MainUI:
             # Need to add in timer here for X-data, involves learning how to use Labjack timer
             self.forceAxis.clear()
             self.lengthAxis.clear()
-            self.forceAxis.set_ylim([-11, 11])
-            self.lengthAxis.set_ylim([-11, 11])
+            self.signalAxis.clear()
+            self.otherAxis.clear()
+            self.forceAxis.set_ylim([-1, 6])
+            self.lengthAxis.set_ylim([-1, 6])
+            self.signalAxis.set_ylim([-1, 6])
+            self.otherAxis.set_ylim([-1, 6])
 
             # Check to see if data has changed. Will need to come up with better way to do this if / when memory becomes an issue.
             # I think I can do this using queueing, which I should implement. Also implement blitting for speed.
@@ -197,44 +183,64 @@ class MainUI:
             if (self.forceData != self.checkDataF) or (self.lengthData != self.checkDataL):
                 if initCheck == 0:
                     initCheck = 1
-                    xlim = (np.arange(len(self.forceData)) + 1) * 1 / PLOT_LENGTH
-                    self.forceAxis.plot(xlim, self.forceData, color='blue')
-                    self.lengthAxis.plot(xlim, self.lengthData, color='blue')
-                    self.forceAxis.set_xlim([xlim[0], xlim[-1]])
-                    self.lengthAxis.set_xlim([xlim[0], xlim[-1]])
-                    lastInd = xlim[-1]
-                    print(lastInd)
-                    self.forceAxis.set_xticks((np.arange(len(self.forceData), step = 20) + 1) * 1 / PLOT_LENGTH)
-                    self.lengthAxis.set_xticks((np.arange(len(self.forceData), step = 20) + 1) * 1 / PLOT_LENGTH)
+                    self.forceAxis.plot(self.forceData, color='blue')
+                    self.lengthAxis.plot(self.lengthData, color='blue')
+                    self.signalAxis.plot(self.signalData, color='blue')
+                    self.otherAxis.plot(self.otherData, color='blue')
+                    # fxlim = np.floor((np.arange(len(self.forceData)) + 1) * 1 / PLOT_LENGTH)
+                    # lxlim = np.floor((np.arange(len(self.forceData) - 1) + 1) * 1 / PLOT_LENGTH)
+                    # self.forceAxis.plot(fxlim, self.forceData, color='blue')
+                    # self.lengthAxis.plot(lxlim, self.lengthData, color='blue')
+                    # self.signalAxis.plot(lxlim, self.signalData, color='blue')
+                    # self.forceAxis.set_xlim([fxlim[0], fxlim[-1]])
+                    # self.lengthAxis.set_xlim([lxlim[0], lxlim[-1]])
+                    # self.signalAxis.set_xlim([lxlim[0], lxlim[-1]])
+                    # lastInd = xlim[-1]
+                    # self.forceAxis.set_xticks((np.arange(len(self.forceData), step = 20) + 1) * 1 / PLOT_LENGTH)
+                    # self.lengthAxis.set_xticks((np.arange(len(self.forceData), step = 20) + 1) * 1 / PLOT_LENGTH)
+                    # self.signalAxis.set_xticks((np.arange(len(self.forceData), step = 20) + 1) * 1 / PLOT_LENGTH)
                 else:
-                    xlim = lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:])) + 1) * 1 / PLOT_LENGTH
-                    self.forceAxis.plot(xlim, self.forceData[-PLOT_LENGTH:], color='blue')
-                    self.lengthAxis.plot(xlim, self.lengthData[-PLOT_LENGTH:], color='blue')
-                    self.forceAxis.set_xlim([xlim[0], xlim[-1]])
-                    self.lengthAxis.set_xlim([xlim[0], xlim[-1]])
-                    self.forceAxis.set_xticks(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:]), step = 20) + 1) * 1 / PLOT_LENGTH)
-                    self.lengthAxis.set_xticks(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:]), step = 20) + 1) * 1 / PLOT_LENGTH)
-                    lastInd = xlim[-1]
+                    self.forceAxis.plot(self.forceData, color='blue')
+                    self.lengthAxis.plot(self.lengthData, color='blue')
+                    self.signalAxis.plot(self.signalData, color='blue')
+                    self.otherAxis.plot(self.otherData, color='blue')
+                    # xlim = np.floor(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:])) + 1) * 1 / PLOT_LENGTH)
+                    # self.forceAxis.plot(xlim, self.forceData[-PLOT_LENGTH:], color='blue')
+                    # self.lengthAxis.plot(xlim, self.lengthData[-PLOT_LENGTH:], color='blue')
+                    # self.signalAxis.plot(xlim, self.signalData[-PLOT_LENGTH:], color='blue')
+                    # self.forceAxis.set_xlim([xlim[0], xlim[-1]])
+                    # self.lengthAxis.set_xlim([xlim[0], xlim[-1]])
+                    # self.signalAxis.set_xlim([xlim[0], xlim[-1]])
+                    # self.forceAxis.set_xticks(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:]), step = 20) + 1) * 1 / PLOT_LENGTH)
+                    # self.lengthAxis.set_xticks(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:]), step = 20) + 1) * 1 / PLOT_LENGTH)
+                    # self.signalAxis.set_xticks(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:]), step = 20) + 1) * 1 / PLOT_LENGTH)
+                    # lastInd = xlim[-1]
 
                 self.canvas.draw()
                 self.checkDataF = self.forceData
                 self.checkDataL = self.lengthData
 
         if shouldPlotContinue == 0:
+            pass
             # Set plots after stopping to an overall view of data (This happens anyway in an uncontrolled fashion, set here so it's controlled.)
-            self.forceAxis.clear()
-            self.lengthAxis.clear()
-            self.forceAxis.set_ylim([-11, 11])
-            self.lengthAxis.set_ylim([-11, 11])
-            xlim = (np.arange(len(self.forceData)) + 1) * 1 / PLOT_LENGTH
-            self.forceAxis.plot(xlim, self.forceData, color='blue')
-            self.lengthAxis.plot(xlim, self.lengthData, color='blue')
-            self.forceAxis.set_xlim([xlim[0], xlim[-1]])
-            self.lengthAxis.set_xlim([xlim[0], xlim[-1]])
-            stepper = round(len(self.forceData)/20)
-            self.forceAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
-            self.lengthAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
-            self.canvas.draw()
+            # self.forceAxis.clear()
+            # self.lengthAxis.clear()
+            # self.signalAxis.clear()
+            # self.forceAxis.set_ylim([-11, 11])
+            # self.lengthAxis.set_ylim([-11, 11])
+            # self.signalAxis.set_ylim([-11, 11])
+            # xlim = np.floor((np.arange(len(self.forceData)) + 1) * 1 / PLOT_LENGTH)
+            # self.forceAxis.plot(xlim, self.forceData, color='blue')
+            # self.lengthAxis.plot(xlim, self.lengthData, color='blue')
+            # self.signalAxis.plot(xlim, self.signalData, color='blue')
+            # self.forceAxis.set_xlim([xlim[0], xlim[-1]])
+            # self.lengthAxis.set_xlim([xlim[0], xlim[-1]])
+            # self.signalAxis.set_xlim([xlim[0], xlim[-1]])
+            # stepper = round(len(self.forceData)/20)
+            # self.forceAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
+            # self.lengthAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
+            # self.signalAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
+            # self.canvas.draw()
         elif shouldPlotContinue == 1:
             self.root.after(50, self.updateGraph)
 
@@ -249,7 +255,7 @@ class MainUI:
         print("Configuring U6 stream")
 
         # Set up the stream from Labjack U6
-        self.U6device.streamConfig(NumChannels=2, ChannelNumbers=[0, 1], ChannelOptions=[0, 0], SettlingFactor=1, ResolutionIndex=4, ScanFrequency=self.SCAN_FREQUENCY)
+        self.U6device.streamConfig(NumChannels=4, ChannelNumbers=[0, 1, 2, 3], ChannelOptions=[0, 0, 0, 0], SettlingFactor=1, ResolutionIndex=4, ScanFrequency=self.SCAN_FREQUENCY)
         while streamStopper == 0:
             print("Start stream")
             self.U6device.streamStart()
@@ -281,7 +287,9 @@ class MainUI:
                     updateData = r["AIN0"]
                     # Append onto all data, for export later
                     self.forceData = self.forceData + [self.forceCalibration * i for i in r["AIN0"]]
-                    self.lengthData = self.lengthData + r["AIN1"]
+                    self.lengthData = self.lengthData + r["AIN2"]
+                    self.signalData = self.signalData + r["AIN1"]
+                    self.otherData = self.otherData + r["AIN3"]
                     # self.signalData = self.signalData + r["AIN2"] # FOR SIGNAL DATA ACQUISITION
 
                     dataCount += 1
@@ -314,47 +322,47 @@ class MainUI:
     def sendSignal(self):
         # Set voltages, then after sleep, reset to 0.
         # NEED TO ADD CONVERSION FROM/TO mm HERE. WHAT V = WHAT mm?
-        CONST_YELLOW = 5
-        PULSE_HEIGHT = 3 # eventually needs to be lengthChange * self.LengthToVolts
-        PULSE_LENGTH = 5
+        print("Sending Signal")
+        CONST_YELLOW = 3.8
+        STRETCH_LENGTH = 3 # eventually needs to be lengthChange * self.LengthToVolts
+        PULSE_LENGTH = 3
+        PULSE_WAIT = 0.1
         nSteps = int(self.nRises.get())
         stepNum = 1
 
-        self.setVoltage(CONST_YELLOW, 'DACB')
-
-        time.sleep(0.001)
-
-        while stepNum <= nSteps:
-            currentValue = stepNum * PULSE_HEIGHT / nSteps
-            self.setVoltage(currentValue, 'DACA')
+        DAC0_VALUE = self.U3device.voltageToDACBits(STRETCH_LENGTH, dacNumber = 1, is16Bits = False)
+        self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
+        DAC1_VALUE = self.U3device.voltageToDACBits(CONST_YELLOW, dacNumber = 1, is16Bits = False)
+        self.U3device.getFeedback(u3.DAC1_8(DAC1_VALUE))
+        
+        time.sleep(PULSE_LENGTH)
+        while stepNum < nSteps:
+            currentValue = stepNum * STRETCH_LENGTH / nSteps
+            DAC0_VALUE = self.U3device.voltageToDACBits(currentValue, dacNumber = 1, is16Bits = False)
+            self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
             time.sleep(PULSE_LENGTH)
-            self.setVoltage(0, 'DACA')
             stepNum += 1
 
-        self.setVoltage(-PULSE_HEIGHT, 'DACA')
-        time.sleep(0.02)
-        self.setVoltage(0, 'DACA')
-        self.setVoltage(0, 'DACB')
 
+        DAC1_VALUE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
+        self.U3device.getFeedback(u3.DAC1_8(DAC1_VALUE))
 
         # Create sine wave generator
         # t = 0
-        # step = 0.01
+        # step = 0.1
         # while t < 10:
         #     t += step
-        #     value = 2*math.sin(math.pi * t)
+        #     value = 2*math.sin(math.pi * t) + 2
         #     print(value)
-        #     binaryA = int(value*self.slopeA + self.offsetA)
-        #     self.U3device.i2c(MainUI.DAC_ADDRESS, [48, binaryA // 256, binaryA % 256],
-        #                     SDAPinNum=self.sdaPin, SCLPinNum=self.sclPin)
+        #     DAC0_VALUE = self.U3device.voltageToDACBits(value, dacNumber = 1, is16Bits = False)
+        #     self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
         #     time.sleep(0.02)
-        # self.U3device.i2c(MainUI.DAC_ADDRESS, [48, 0 // 256, 0 % 256],
-        #                 SDAPinNum=self.sdaPin, SCLPinNum=self.sclPin)
-        return
+        # self.U3device.getFeedback(u3.DAC0_8(0))
+        # return
 
     # Finally, an export function to write the data from streaming to the disk.
     def exportData(self):
-        outputArray = zip(self.forceData, self.lengthData)
+        outputArray = zip(self.forceData, self.lengthData, self.signalData)
         if not os.path.exists('./outputs'):
                 os.makedirs('./outputs')
         with open("./outputs/output.csv", "w", newline = "") as f:
@@ -397,12 +405,42 @@ class MainUI:
         right, left = struct.unpack("<Ii", struct.pack("B" * 8, *buff[0:8]))
         return float(left) + float(right)/(2**32)
 
-    def setVoltage(self, value, DACPORT):
+    def setLJTick(self):
+        dioPin = 4
+        # Configure FIO0 to FIO4 as analog inputs, and FIO04 to FIO7 as digital I/O.
+        self.U3device.configIO(FIOAnalog=0x0F)
+        self.DACnumbers = {'DACA': 48,
+                               'DACB': 49}
 
-        binaryA = int(value*self.slopeA + self.offsetA)
-        self.U3device.i2c(MainUI.DAC_ADDRESS,
-                        [self.DACnumbers[DACPORT], binaryA // 256, binaryA % 256],
-                        SDAPinNum=self.sdaPin, SCLPinNum=self.sclPin)
+        EEPROM_ADDRESS = 0x50
+        self.sclPin = dioPin
+        self.sdaPin = self.sclPin + 1
+
+        data = self.U3device.i2c(EEPROM_ADDRESS, [64],
+                               NumI2CBytesToReceive=36, SDAPinNum=self.sdaPin,
+                               SCLPinNum=self.sclPin)
+        response = data['I2CBytes']
+        self.slopeA = self.toDouble(response[0:8])
+        self.offsetA = self.toDouble(response[8:16])
+        self.slopeB = self.toDouble(response[16:24])
+        self.offsetB = self.toDouble(response[24:32])
+
+        if 255 in response:
+            msg = "LJTick-DAC calibration constants seem off. Check that the " \
+                  "LJTick-DAC is connected properly."
+            raise Exception(msg)
+
+        self.setVoltage(0, 'DACA')
+        self.setVoltage(0, 'DACB')
+
+
+    def setVoltage(self, value):
+        pass
+        # DAC_ADDRESS = 0x12
+        # binaryA = int(value*self.slopeA + self.offsetA)
+        # self.U3device.i2c(DAC_ADDRESS,
+        #                 [self.DACnumbers[DACPORT], binaryA // 256, binaryA % 256],
+        #                 SDAPinNum=self.sdaPin, SCLPinNum=self.sclPin)
 
     # A close function, to stop any active threads in the proper way, close the device, and close the window.
     def close(self):
