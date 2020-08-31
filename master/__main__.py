@@ -127,13 +127,13 @@ class MainUI:
 
         # Might need to move entire figure creation, etc, into the thread so that it can be accessed properly? Not sure.
         self.plotFig = Figure(figsize=(19.2, 7.2), dpi = 100) # Have to take into account the DPI to set the inch sizes here. 100 dpi = 19.2 inches for a typical 1920x1080 screen.
-        self.forceAxis = self.plotFig.add_subplot(2, 1, 1)
-        self.lengthAxis = self.plotFig.add_subplot(2, 1, 2)
-        # self.signalAxis = self.plotFig.add_subplot(4, 1, 3)
+        self.forceAxis = self.plotFig.add_subplot(3, 1, 1)
+        self.lengthAxis = self.plotFig.add_subplot(3, 1, 2)
+        self.signalAxis = self.plotFig.add_subplot(3, 1, 3)
         # self.otherAxis = self.plotFig.add_subplot(4, 1, 4)
         self.forceAxis.set_ylim([-10, 10]) # Set the y-axis limits to -10 and 10, the range of the transducer (might actually be -5 to 5, need to check).
         self.lengthAxis.set_ylim([-10, 10])
-        # self.signalAxis.set_ylim([-10, 10])
+        self.signalAxis.set_ylim([-10, 10])
         # self.otherAxis.set_ylim([-10, 10])
         self.plotFig.set_tight_layout(True) # Get rid of that annoying whitespace.
         self.canvas = FigureCanvasTkAgg(self.plotFig, self.plottingFrame) # Tell TKinter which frame to put the canvas into
@@ -170,11 +170,11 @@ class MainUI:
             # Need to add in timer here for X-data, involves learning how to use Labjack timer
             self.forceAxis.clear()
             self.lengthAxis.clear()
-            # self.signalAxis.clear()
+            self.signalAxis.clear()
             # self.otherAxis.clear()
             self.forceAxis.set_ylim([-1, 6])
             self.lengthAxis.set_ylim([-1, 6])
-            # self.signalAxis.set_ylim([-1, 6])
+            self.signalAxis.set_ylim([-1, 6])
             # self.otherAxis.set_ylim([-1, 6])
 
             # Check to see if data has changed. Will need to come up with better way to do this if / when memory becomes an issue.
@@ -185,7 +185,7 @@ class MainUI:
                     initCheck = 1
                     self.forceAxis.plot(self.forceData, color='blue')
                     self.lengthAxis.plot(self.lengthData, color='blue')
-                    # self.signalAxis.plot(self.signalData, color='blue')
+                    self.signalAxis.plot(self.signalData, color='blue')
                     # self.otherAxis.plot(self.otherData, color='blue')
                     # fxlim = np.floor((np.arange(len(self.forceData)) + 1) * 1 / PLOT_LENGTH)
                     # lxlim = np.floor((np.arange(len(self.forceData) - 1) + 1) * 1 / PLOT_LENGTH)
@@ -202,7 +202,7 @@ class MainUI:
                 else:
                     self.forceAxis.plot(self.forceData, color='blue')
                     self.lengthAxis.plot(self.lengthData, color='blue')
-                    # self.signalAxis.plot(self.signalData, color='blue')
+                    self.signalAxis.plot(self.signalData, color='blue')
                     # self.otherAxis.plot(self.otherData, color='blue')
                     # xlim = np.floor(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:])) + 1) * 1 / PLOT_LENGTH)
                     # self.forceAxis.plot(xlim, self.forceData[-PLOT_LENGTH:], color='blue')
@@ -221,26 +221,26 @@ class MainUI:
                 self.checkDataL = self.lengthData
 
         if shouldPlotContinue == 0:
-            pass
+            # pass
             # Set plots after stopping to an overall view of data (This happens anyway in an uncontrolled fashion, set here so it's controlled.)
-            # self.forceAxis.clear()
-            # self.lengthAxis.clear()
-            # self.signalAxis.clear()
-            # self.forceAxis.set_ylim([-11, 11])
-            # self.lengthAxis.set_ylim([-11, 11])
-            # self.signalAxis.set_ylim([-11, 11])
-            # xlim = np.floor((np.arange(len(self.forceData)) + 1) * 1 / PLOT_LENGTH)
-            # self.forceAxis.plot(xlim, self.forceData, color='blue')
-            # self.lengthAxis.plot(xlim, self.lengthData, color='blue')
-            # self.signalAxis.plot(xlim, self.signalData, color='blue')
-            # self.forceAxis.set_xlim([xlim[0], xlim[-1]])
-            # self.lengthAxis.set_xlim([xlim[0], xlim[-1]])
-            # self.signalAxis.set_xlim([xlim[0], xlim[-1]])
-            # stepper = round(len(self.forceData)/20)
-            # self.forceAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
-            # self.lengthAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
-            # self.signalAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
-            # self.canvas.draw()
+            self.forceAxis.clear()
+            self.lengthAxis.clear()
+            self.signalAxis.clear()
+            self.forceAxis.set_ylim([-11, 11])
+            self.lengthAxis.set_ylim([-11, 11])
+            self.signalAxis.set_ylim([-11, 11])
+            xlim = np.floor((np.arange(len(self.forceData)) + 1) * 1 / PLOT_LENGTH)
+            self.forceAxis.plot(xlim, self.forceData, color='blue')
+            self.lengthAxis.plot(xlim, self.lengthData, color='blue')
+            self.signalAxis.plot(xlim, self.signalData, color='blue')
+            self.forceAxis.set_xlim([xlim[0], xlim[-1]])
+            self.lengthAxis.set_xlim([xlim[0], xlim[-1]])
+            self.signalAxis.set_xlim([xlim[0], xlim[-1]])
+            stepper = round(len(self.forceData)/20)
+            self.forceAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
+            self.lengthAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
+            self.signalAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
+            self.canvas.draw()
         elif shouldPlotContinue == 1:
             self.root.after(50, self.updateGraph)
 
@@ -255,7 +255,7 @@ class MainUI:
         print("Configuring U6 stream")
 
         # Set up the stream from Labjack U6
-        self.U6device.streamConfig(NumChannels=4, ChannelNumbers=[0, 1, 2, 3], ChannelOptions=[0, 0, 0, 0], SettlingFactor=1, ResolutionIndex=4, ScanFrequency=self.SCAN_FREQUENCY)
+        self.U6device.streamConfig(NumChannels=3, ChannelNumbers=[0, 1, 2], ChannelOptions=[0, 0, 0], SettlingFactor=1, ResolutionIndex=4, ScanFrequency=self.SCAN_FREQUENCY)
         while streamStopper == 0:
             print("Start stream")
             self.U6device.streamStart()
@@ -288,9 +288,8 @@ class MainUI:
                     # Append onto all data, for export later
                     self.forceData = self.forceData + [self.forceCalibration * i for i in r["AIN0"]]
                     self.lengthData = self.lengthData + r["AIN1"]
-                    # self.signalData = self.signalData + r["AIN2"]
+                    self.signalData = self.signalData + r["AIN2"]
                     # self.otherData = self.otherData + r["AIN3"]
-                    # self.signalData = self.signalData + r["AIN2"] # FOR SIGNAL DATA ACQUISITION
 
                     dataCount += 1
                     packetCount += r['numPackets']
