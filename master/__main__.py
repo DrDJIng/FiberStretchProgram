@@ -10,6 +10,7 @@ from functools import partial
 from datetime import datetime
 from tkinter import *
 from tkinter import ttk
+from tkinter import messagebox
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
@@ -65,6 +66,7 @@ class MainUI:
         Grid.rowconfigure(self.root, 0, weight = 1)
         Grid.columnconfigure(self.root, 0, weight = 1)
         numRises = StringVar()
+        disMove = StringVar()
         calWeight = StringVar()
         calForce = StringVar()
 
@@ -89,6 +91,11 @@ class MainUI:
         self.nRises = ttk.Entry(self.signalFrame, textvariable = numRises)
         self.nRises.grid(column = 1, row = 1)
         self.nRises.insert(0, '1')
+        self.moveLabel = ttk.Label(self.signalFrame, text = 'Move distance (mm)')
+        self.moveLabel.grid(column = 0, row = 0)
+        self.disMove = ttk.Entry(self.signalFrame, textvariable = disMove)
+        self.disMove.grid(column = 1, row = 0)
+        self.disMove.insert(0, '1')
         # Signal buttons
         self.signalButton = ttk.Button(self.signalFrame, text = 'Send signal', command = partial(self.startNewThread, self.sendSignal))
         self.signalButton.grid(column = 2, row = 0)
@@ -132,8 +139,8 @@ class MainUI:
         self.signalAxis = self.plotFig.add_subplot(3, 1, 3)
         # self.otherAxis = self.plotFig.add_subplot(4, 1, 4)
         self.forceAxis.set_ylim([-10, 10]) # Set the y-axis limits to -10 and 10, the range of the transducer (might actually be -5 to 5, need to check).
-        self.lengthAxis.set_ylim([-10, 10])
-        self.signalAxis.set_ylim([-10, 10])
+        self.lengthAxis.set_ylim([0, 4])
+        self.signalAxis.set_ylim([0, 5])
         # self.otherAxis.set_ylim([-10, 10])
         self.plotFig.set_tight_layout(True) # Get rid of that annoying whitespace.
         self.canvas = FigureCanvasTkAgg(self.plotFig, self.plottingFrame) # Tell TKinter which frame to put the canvas into
@@ -223,26 +230,20 @@ class MainUI:
         if shouldPlotContinue == 0:
             # pass
             # Set plots after stopping to an overall view of data (This happens anyway in an uncontrolled fashion, set here so it's controlled.)
-            self.forceAxis.clear()
-            self.lengthAxis.clear()
-            self.signalAxis.clear()
-            self.forceAxis.set_ylim([-11, 11])
-            self.lengthAxis.set_ylim([-11, 11])
-            self.signalAxis.set_ylim([-11, 11])
-            xlim = np.floor((np.arange(len(self.forceData)) + 1) * 1 / PLOT_LENGTH)
-            self.forceAxis.plot(xlim, self.forceData, color='blue')
-            self.lengthAxis.plot(xlim, self.lengthData, color='blue')
-            self.signalAxis.plot(xlim, self.signalData, color='blue')
-            self.forceAxis.set_xlim([xlim[0], xlim[-1]])
-            self.lengthAxis.set_xlim([xlim[0], xlim[-1]])
-            self.signalAxis.set_xlim([xlim[0], xlim[-1]])
-            stepper = round(len(self.forceData)/20)
-            self.forceAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
-            self.lengthAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
-            self.signalAxis.set_xticks((np.arange(len(self.forceData), step = stepper) + 1) * 1 / PLOT_LENGTH)
+            self.endPlot(self.forceAxis, self.forceData)
+            self.endPlot(self.lengthAxis, self.lengthData)
+            self.endPlot(self.signalAxis, self.signalData)
             self.canvas.draw()
         elif shouldPlotContinue == 1:
             self.root.after(50, self.updateGraph)
+
+    def endPlot(self, plotAxis, plotData):
+        plotAxis.clear()
+        xlim = np.arange(len(plotData)) * 1 / self.SCAN_FREQUENCY
+        plotAxis.plot(xlim, plotData, color='blue')
+        plotAxis.set_xlim([xlim[0], xlim[-1]])
+        stepper = round(len(self.forceData)/20)
+        plotAxis.set_xticks(np.arange(len(plotData), step = stepper) * 1 / self.SCAN_FREQUENCY)
 
     # Set up the LabJack and start the streaming process
     def startStream(self):
@@ -323,34 +324,40 @@ class MainUI:
         # NEED TO ADD CONVERSION FROM/TO mm HERE. WHAT V = WHAT mm?
         print("Sending Signal")
         CONST_YELLOW = 3.8
-        STRETCH_LENGTH = 3 # eventually needs to be lengthChange * self.LengthToVolts
         PULSE_LENGTH = 3
         nSteps = int(self.nRises.get())
         stepNum = 1
+        STRETCH_LENGTH = float(self.disMove.get()) # eventually needs to be lengthChange * self.LengthToVolts
 
-        DAC0_VALUE = self.U3device.voltageToDACBits(STRETCH_LENGTH/nSteps, dacNumber = 1, is16Bits = False)
-        self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
-        time.sleep(0.1)
-        DAC1_VALUE = self.U3device.voltageToDACBits(CONST_YELLOW, dacNumber = 1, is16Bits = False)
-        self.U3device.getFeedback(u3.DAC1_8(DAC1_VALUE))
+        if STRETCH_LENGTH > 3.5 or STRETCH_LENGTH < 0:
+            messagebox.showerror(
+            "Setting stretch length",
+            "Stretch length must be between 0 and 3.5 mm.\n(%s)" % STRETCH_LENGTH)
+        elif nSteps < 1:
+            messagebox.showerror(
+            "Setting step number",
+            "Voltage can only increase be positive integer amounts.\n(%s)" % nSteps)
+        else:
+            DAC0_VALUE = self.U3device.voltageToDACBits(STRETCH_LENGTH/nSteps, dacNumber = 1, is16Bits = False)
+            self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
+            time.sleep(0.2)
+            DAC1_VALUE = self.U3device.voltageToDACBits(CONST_YELLOW, dacNumber = 1, is16Bits = False)
+            self.U3device.getFeedback(u3.DAC1_8(DAC1_VALUE))
 
-        while stepNum <= nSteps:
-            if stepNum == 1:
-                stepNum += 1
-                time.sleep(PULSE_LENGTH)
-            else:
-                currentValue = stepNum * STRETCH_LENGTH / nSteps
-                DAC0_VALUE = self.U3device.voltageToDACBits(currentValue, dacNumber = 1, is16Bits = False)
-                self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
-                time.sleep(PULSE_LENGTH)
-                stepNum += 1
+            while stepNum <= nSteps:
+                if stepNum == 1:
+                    stepNum += 1
+                    time.sleep(PULSE_LENGTH)
+                else:
+                    currentValue = stepNum * STRETCH_LENGTH / nSteps
+                    DAC0_VALUE = self.U3device.voltageToDACBits(currentValue, dacNumber = 1, is16Bits = False)
+                    self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
+                    time.sleep(PULSE_LENGTH)
+                    stepNum += 1
 
 
-        DAC1_VALUE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
-        self.U3device.getFeedback(u3.DAC1_8(DAC1_VALUE))
-        time.sleep(0.1)
-        DAC0_VALUE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
-        self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
+            DAC1_VALUE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
+            self.U3device.getFeedback(u3.DAC1_8(DAC1_VALUE))
 
         # Create sine wave generator
         # t = 0
