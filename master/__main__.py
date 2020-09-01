@@ -69,6 +69,7 @@ class MainUI:
         disMove = StringVar()
         calWeight = StringVar()
         calForce = StringVar()
+        pulLen = StringVar()
 
         self.mainFrame = ttk.Frame(self.root, borderwidth=5, relief="sunken")
         self.mainFrame.grid(column = 0, row = 0, sticky = (N, S, E, W))
@@ -86,16 +87,22 @@ class MainUI:
         self.signalFrame = ttk.Frame(self.settingsFrame)
         self.signalFrame.grid(column = 0, row = 0)
         # Signal options
-        self.raisesLabel = ttk.Label(self.signalFrame, text = 'Number of voltage raises')
-        self.raisesLabel.grid(column = 0, row = 1)
-        self.nRises = ttk.Entry(self.signalFrame, textvariable = numRises)
-        self.nRises.grid(column = 1, row = 1)
-        self.nRises.insert(0, '1')
         self.moveLabel = ttk.Label(self.signalFrame, text = 'Move distance (mm)')
         self.moveLabel.grid(column = 0, row = 0)
         self.disMove = ttk.Entry(self.signalFrame, textvariable = disMove)
         self.disMove.grid(column = 1, row = 0)
         self.disMove.insert(0, '1')
+        self.timeLabel = ttk.Label(self.signalFrame, text = 'Pulse length (s)')
+        self.timeLabel.grid(column = 0, row = 1)
+        self.pulTime = ttk.Entry(self.signalFrame, textvariable = pulLen)
+        self.pulTime.grid(column = 1, row = 1)
+        self.pulTime.insert(0, '1')
+        self.raisesLabel = ttk.Label(self.signalFrame, text = 'Number of voltage raises')
+        self.raisesLabel.grid(column = 0, row = 2)
+        self.nRises = ttk.Entry(self.signalFrame, textvariable = numRises)
+        self.nRises.grid(column = 1, row = 2)
+        self.nRises.insert(0, '1')
+
         # Signal buttons
         self.signalButton = ttk.Button(self.signalFrame, text = 'Send signal', command = partial(self.startNewThread, self.sendSignal))
         self.signalButton.grid(column = 2, row = 0)
@@ -113,10 +120,14 @@ class MainUI:
         self.stageBackwardButton.grid(column = 2, row = 2)
 
         # Other buttons
-        self.otherFrame = ttk.Frame(self.settingsFrame)
-        self.otherFrame.grid(column = 2, row = 0)
+        self.exportFrame = ttk.Frame(self.settingsFrame)
+        self.exportFrame.grid(column = 2, row = 0)
         self.exportButton = ttk.Button(self.otherFrame, text = 'Export data', command = self.exportData)
-        self.exportButton.grid(column = 0, row = 0, pady = 10)
+        self.exportButton.grid(column = 0, row = 0)
+        
+        # Calibrate buttons
+        self.calibrateFrame = ttk.Frame(self.settingsFrame)
+        self.calibrateFrame.grid(column = 3, row = 0)
         self.calibrateButton = ttk.Button(self.otherFrame, text = 'Calibrate', command = self.setCalibration)
         self.calibrateButton.grid(column = 1, row = 2)
         self.calWeight = ttk.Entry(self.otherFrame, textvariable = calWeight)
@@ -179,9 +190,9 @@ class MainUI:
             self.lengthAxis.clear()
             self.signalAxis.clear()
             # self.otherAxis.clear()
-            self.forceAxis.set_ylim([-1, 6])
-            self.lengthAxis.set_ylim([-1, 6])
-            self.signalAxis.set_ylim([-1, 6])
+            self.forceAxis.set_ylim([-2, 6])
+            self.lengthAxis.set_ylim([1, 4])
+            self.signalAxis.set_ylim([-1, 5])
             # self.otherAxis.set_ylim([-1, 6])
 
             # Check to see if data has changed. Will need to come up with better way to do this if / when memory becomes an issue.
@@ -250,6 +261,7 @@ class MainUI:
         global shouldPlotContinue
         global streamStopper
         streamStopper = 0 # To stop the streaming/thread.
+        self.signalButton.state(["disabled"])
 
         print('Starting data stream...')
 
@@ -317,6 +329,7 @@ class MainUI:
         initCheck = 0 # Reset initial check for plotting
         shouldPlotContinue = 0 # Stop plotting
         self.streamThread.join()
+        self.signalButton.state(["!disabled"])
 
     # Function to send signal to the motors, generalised such that it can send a signal to either the stage motor (SM) or force motor (FM).
     def sendSignal(self):
@@ -324,10 +337,10 @@ class MainUI:
         # NEED TO ADD CONVERSION FROM/TO mm HERE. WHAT V = WHAT mm?
         print("Sending Signal")
         CONST_YELLOW = 3.8
-        PULSE_LENGTH = 3
+        PULSE_LENGTH = float(self.pulLen.get())
         nSteps = int(self.nRises.get())
-        stepNum = 1
         STRETCH_LENGTH = float(self.disMove.get()) # eventually needs to be lengthChange * self.LengthToVolts
+        stepNum = 1
 
         if STRETCH_LENGTH > 3.5 or STRETCH_LENGTH < 0:
             messagebox.showerror(
@@ -359,22 +372,9 @@ class MainUI:
             DAC1_VALUE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
             self.U3device.getFeedback(u3.DAC1_8(DAC1_VALUE))
 
-        # Create sine wave generator
-        # t = 0
-        # step = 0.1
-        # while t < 10:
-        #     t += step
-        #     value = 2*math.sin(math.pi * t) + 2
-        #     print(value)
-        #     DAC0_VALUE = self.U3device.voltageToDACBits(value, dacNumber = 1, is16Bits = False)
-        #     self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
-        #     time.sleep(0.02)
-        # self.U3device.getFeedback(u3.DAC0_8(0))
-        # return
-
     # Finally, an export function to write the data from streaming to the disk.
     def exportData(self):
-        outputArray = zip(self.forceData, self.lengthData, self.signalData)
+        outputArray = zip(self.forceData, self.lengthData, self.signalData, np.arrange(len(self.forceData))*1/self.SCAN_FREQUENCY)
         if not os.path.exists('./outputs'):
                 os.makedirs('./outputs')
         with open("./outputs/output.csv", "w", newline = "") as f:
