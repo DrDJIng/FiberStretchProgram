@@ -62,6 +62,7 @@ class MainUI:
     def startUI(self):
         # Set up UI system.
         self.root = Tk()
+        self.root.state('zoomed')
         self.root.title("Force measurements")
         Grid.rowconfigure(self.root, 0, weight = 1)
         Grid.columnconfigure(self.root, 0, weight = 1)
@@ -70,6 +71,14 @@ class MainUI:
         calWeight = StringVar()
         calForce = StringVar()
         pulLen = StringVar()
+        exName = StringVar()
+        exPoints = StringVar()
+        fLimU = StringVar()
+        fLimD = StringVar()
+        lLimU = StringVar()
+        lLimD = StringVar()
+        sLimU = StringVar()
+        sLimD = StringVar()
 
         self.mainFrame = ttk.Frame(self.root, borderwidth=5, relief="sunken")
         self.mainFrame.grid(column = 0, row = 0, sticky = (N, S, E, W))
@@ -82,38 +91,44 @@ class MainUI:
         self.settingsFrame.columnconfigure(0, weight = 1)
         self.settingsFrame.columnconfigure(1, weight = 1)
         self.settingsFrame.columnconfigure(2, weight = 1)
+        self.settingsFrame.columnconfigure(3, weight = 1)
+        self.settingsFrame.columnconfigure(4, weight = 1)
 
         # Create buttons and place them in the setting frame.
-        self.signalFrame = ttk.Frame(self.settingsFrame)
-        self.signalFrame.grid(column = 0, row = 0)
+        self.signalSetsFrame = ttk.Frame(self.settingsFrame)
+        self.signalSetsFrame.grid(column = 0, row = 0)
         # Signal options
-        self.moveLabel = ttk.Label(self.signalFrame, text = 'Move distance (mm)')
+        self.moveLabel = ttk.Label(self.signalSetsFrame, text = 'Move distance (mm)')
         self.moveLabel.grid(column = 0, row = 0)
-        self.disMove = ttk.Entry(self.signalFrame, textvariable = disMove)
+        self.disMove = ttk.Entry(self.signalSetsFrame, textvariable = disMove, width = 5, justify = CENTER)
         self.disMove.grid(column = 1, row = 0)
         self.disMove.insert(0, '1')
-        self.timeLabel = ttk.Label(self.signalFrame, text = 'Pulse length (s)')
+        self.timeLabel = ttk.Label(self.signalSetsFrame, text = 'Pulse length (s)')
         self.timeLabel.grid(column = 0, row = 1)
-        self.pulTime = ttk.Entry(self.signalFrame, textvariable = pulLen)
+        self.pulTime = ttk.Entry(self.signalSetsFrame, textvariable = pulLen, width = 5, justify = CENTER)
         self.pulTime.grid(column = 1, row = 1)
         self.pulTime.insert(0, '1')
-        self.raisesLabel = ttk.Label(self.signalFrame, text = 'Number of voltage raises')
+        self.raisesLabel = ttk.Label(self.signalSetsFrame, text = 'Number of voltage raises')
         self.raisesLabel.grid(column = 0, row = 2)
-        self.nRises = ttk.Entry(self.signalFrame, textvariable = numRises)
+        self.nRises = ttk.Entry(self.signalSetsFrame, textvariable = numRises, width = 5, justify = CENTER)
         self.nRises.grid(column = 1, row = 2)
         self.nRises.insert(0, '1')
 
-        # Signal buttons
+        # Create buttons and place them in the signal frame.
+        self.signalFrame = ttk.Frame(self.settingsFrame)
+        self.signalFrame.grid(column = 1, row = 0)
+        self.moveLabel = ttk.Label(self.signalFrame, text = "Frequency set to: %s" % self.SCAN_FREQUENCY)
+        self.moveLabel.grid(column = 0, row = 0)
         self.signalButton = ttk.Button(self.signalFrame, text = 'Send signal', command = partial(self.startNewThread, self.sendSignal))
-        self.signalButton.grid(column = 2, row = 0)
+        self.signalButton.grid(column = 0, row = 2, pady = 10)
         self.startButton = ttk.Button(self.signalFrame, text = 'Start measuring', command = partial(self.startNewThread, self.startStream))
-        self.startButton.grid(column = 2, row = 1, pady = 10)
+        self.startButton.grid(column = 0, row = 3, pady = 10)
         self.stopButton = ttk.Button(self.signalFrame, text = 'Stop measuring', command = self.stopStream)
-        self.stopButton.grid(column = 2, row = 2, pady = 10)
+        self.stopButton.grid(column = 0, row = 4, pady = 10)
 
         # Stage buttons
         self.stageFrame = ttk.Frame(self.settingsFrame)
-        self.stageFrame.grid(column = 1, row = 0)
+        self.stageFrame.grid(column = 2, row = 0)
         self.stageForwardButton = ttk.Button(self.stageFrame, text = 'Stage forward', command = partial(self.moveStage, 1))
         self.stageForwardButton.grid(column = 1, row = 2)
         self.stageBackwardButton = ttk.Button(self.stageFrame, text = 'Stage back', command = partial(self.moveStage, -1))
@@ -121,37 +136,48 @@ class MainUI:
 
         # Other buttons
         self.exportFrame = ttk.Frame(self.settingsFrame)
-        self.exportFrame.grid(column = 2, row = 0)
-        self.exportButton = ttk.Button(self.otherFrame, text = 'Export data', command = self.exportData)
-        self.exportButton.grid(column = 0, row = 0)
-        
+        self.exportFrame.grid(column = 3, row = 0)
+        self.exNameLabel = ttk.Label(self.exportFrame, text = 'Export name:')
+        self.exNameLabel.grid(column = 0, row = 0)
+        self.exportName = ttk.Entry(self.exportFrame, textvariable = exName)
+        self.exportName.grid(column = 1, row = 0)
+        self.exportName.insert(0, 'output')
+        self.exPointLabel = ttk.Label(self.exportFrame, text = 'Only save every nth point:')
+        self.exPointLabel.grid(column = 0, row = 1)
+        self.exportPoints = ttk.Entry(self.exportFrame, textvariable = exPoints, width = 3, justify = CENTER)
+        self.exportPoints.grid(column = 1, row = 1)
+        self.exportPoints.insert(0, '100')
+        self.exportButton = ttk.Button(self.exportFrame, text = 'Export data', command = self.exportData)
+        self.exportButton.grid(column = 1, row = 2)
+
         # Calibrate buttons
         self.calibrateFrame = ttk.Frame(self.settingsFrame)
-        self.calibrateFrame.grid(column = 3, row = 0)
-        self.calibrateButton = ttk.Button(self.otherFrame, text = 'Calibrate', command = self.setCalibration)
+        self.calibrateFrame.grid(column = 4, row = 0)
+        self.calibrateButton = ttk.Button(self.calibrateFrame, text = 'Calibrate', command = self.setCalibration)
         self.calibrateButton.grid(column = 1, row = 2)
-        self.calWeight = ttk.Entry(self.otherFrame, textvariable = calWeight)
+        self.calWeight = ttk.Entry(self.calibrateFrame, textvariable = calWeight, width = 3, justify = CENTER)
         self.calWeight.grid(column = 1, row = 0)
         self.calWeight.insert(0, '3')
-        self.calForce = ttk.Entry(self.otherFrame, textvariable = calForce)
+        self.calForce = ttk.Entry(self.calibrateFrame, textvariable = calForce, width = 3, justify = CENTER)
         self.calForce.grid(column = 1, row = 1)
         self.calForce.insert(0, '2')
 
+        self.plotFrame = ttk.Frame(self.mainFrame)
+        self.plotFrame.grid(column = 0, row = 0, sticky = (N, S, E, W))
+        Grid.rowconfigure(self.plotFrame, 0, weight = 1)
+        Grid.columnconfigure(self.plotFrame, 1, weight = 1)
 
-        self.plottingFrame = ttk.Frame(self.mainFrame)
-        self.plottingFrame.grid(column = 0, row = 0, sticky = (N, S, E, W))
+        self.plottingFrame = ttk.Frame(self.plotFrame)
+        self.plottingFrame.grid(column = 1, row = 0, sticky = (N, S, E, W))
         Grid.rowconfigure(self.plottingFrame, 0, weight = 1)
-        Grid.columnconfigure(self.plottingFrame, 0, weight = 1)
+        Grid.columnconfigure(self.plottingFrame, 1, weight = 1)
 
         # Might need to move entire figure creation, etc, into the thread so that it can be accessed properly? Not sure.
-        self.plotFig = Figure(figsize=(19.2, 7.2), dpi = 100) # Have to take into account the DPI to set the inch sizes here. 100 dpi = 19.2 inches for a typical 1920x1080 screen.
+        self.plotFig = Figure(figsize=(15.8, 7.2), dpi = 100) # Have to take into account the DPI to set the inch sizes here. 100 dpi = 19.2 inches for a typical 1920x1080 screen.
         self.forceAxis = self.plotFig.add_subplot(3, 1, 1)
         self.lengthAxis = self.plotFig.add_subplot(3, 1, 2)
         self.signalAxis = self.plotFig.add_subplot(3, 1, 3)
-        # self.otherAxis = self.plotFig.add_subplot(4, 1, 4)
-        self.forceAxis.set_ylim([-10, 10]) # Set the y-axis limits to -10 and 10, the range of the transducer (might actually be -5 to 5, need to check).
-        self.lengthAxis.set_ylim([0, 4])
-        self.signalAxis.set_ylim([0, 5])
+
         # self.otherAxis.set_ylim([-10, 10])
         self.plotFig.set_tight_layout(True) # Get rid of that annoying whitespace.
         self.canvas = FigureCanvasTkAgg(self.plotFig, self.plottingFrame) # Tell TKinter which frame to put the canvas into
@@ -159,9 +185,43 @@ class MainUI:
         self.toolbarFrame = ttk.Frame(self.plottingFrame)
         self.toolbarFrame.grid(column = 0, row = 1)
         self.canvasNav = NavigationToolbar2Tk(self.canvas, self.toolbarFrame)
+
+
+        self.limFrame = ttk.Frame(self.plotFrame)
+        self.limFrame.grid(column = 0, row = 0, sticky = (N, S, E, W))
+        Grid.rowconfigure(self.limFrame, 0, weight = 1)
+        Grid.rowconfigure(self.limFrame, 1, weight = 1)
+        Grid.rowconfigure(self.limFrame, 2, weight = 1)
+        Grid.rowconfigure(self.limFrame, 3, weight = 1)
+        Grid.rowconfigure(self.limFrame, 4, weight = 1)
+        Grid.rowconfigure(self.limFrame, 5, weight = 1)
+
+        self.fLimUp = ttk.Entry(self.limFrame, textvariable = fLimU, width = 3, justify = CENTER)
+        self.fLimUp.grid(column = 0, row = 0)
+        self.fLimUp.insert(0, '10')
+        self.fLimDown = ttk.Entry(self.limFrame, textvariable = fLimD, width = 3, justify = CENTER)
+        self.fLimDown.grid(column = 0, row = 1)
+        self.fLimDown.insert(0, '-1')
+        self.lLimUp = ttk.Entry(self.limFrame, textvariable = lLimU, width = 3, justify = CENTER)
+        self.lLimUp.grid(column = 0, row = 2)
+        self.lLimUp.insert(0, '4')
+        self.lLimDown = ttk.Entry(self.limFrame, textvariable = lLimD, width = 3, justify = CENTER)
+        self.lLimDown.grid(column = 0, row = 3)
+        self.lLimDown.insert(0, '0')
+        self.sLimUp = ttk.Entry(self.limFrame, textvariable = sLimU, width = 3, justify = CENTER)
+        self.sLimUp.grid(column = 0, row = 4)
+        self.sLimUp.insert(0, '6')
+        self.sLimDown = ttk.Entry(self.limFrame, textvariable = sLimD, width = 3, justify = CENTER)
+        self.sLimDown.grid(column = 0, row = 5)
+        self.sLimDown.insert(0, '0')
+
+        # self.otherAxis = self.plotFig.add_subplot(4, 1, 4)
+        self.forceAxis.set_ylim([int(self.fLimDown.get()), int(self.fLimUp.get())]) # Set the y-axis limits to -10 and 10, the range of the transducer (might actually be -5 to 5, need to check).
+        self.lengthAxis.set_ylim([int(self.lLimDown.get()), int(self.lLimUp.get())])
+        self.signalAxis.set_ylim([int(self.sLimDown.get()), int(self.sLimUp.get())])
+
         self.canvas.draw() # Draw the canvas.
         self.canvasNav.update()
-
         # Start mainloop, which activates the window
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.mainloop()
@@ -178,6 +238,9 @@ class MainUI:
             self.signalThread = threading.Thread(target = funcname)
             self.signalThread.start()
 
+    def LimChange(self, direction, axis):
+        pass
+
     def updateGraph(self):
         global initCheck
         global lastInd
@@ -189,12 +252,28 @@ class MainUI:
             self.forceAxis.clear()
             self.lengthAxis.clear()
             self.signalAxis.clear()
-            # self.otherAxis.clear()
-            self.forceAxis.set_ylim([-2, 6])
-            self.lengthAxis.set_ylim([1, 4])
-            self.signalAxis.set_ylim([-1, 5])
-            # self.otherAxis.set_ylim([-1, 6])
 
+            fU = self.fLimUp.get()
+            fD = self.fLimDown.get()
+            lU = self.lLimUp.get()
+            lD = self.lLimDown.get()
+            sU = self.sLimUp.get()
+            sD = self.sLimDown.get()
+
+            if not fU or not fD or not lU or not lD or not sU or not sD:
+                self.forceAxis.set_ylim([-1, 10]) # Set the y-axis limits to -10 and 10, the range of the transducer (might actually be -5 to 5, need to check).
+                self.lengthAxis.set_ylim([0, 4])
+                self.signalAxis.set_ylim([0, 6])
+            else:
+                fU = float(self.fLimUp.get())
+                fD = float(self.fLimDown.get())
+                lU = float(self.lLimUp.get())
+                lD = float(self.lLimDown.get())
+                sU = float(self.sLimUp.get())
+                sD = float(self.sLimDown.get())
+                self.forceAxis.set_ylim([fD, fU]) # Set the y-axis limits to -10 and 10, the range of the transducer (might actually be -5 to 5, need to check).
+                self.lengthAxis.set_ylim([lD, lU])
+                self.signalAxis.set_ylim([sD, sU])
             # Check to see if data has changed. Will need to come up with better way to do this if / when memory becomes an issue.
             # I think I can do this using queueing, which I should implement. Also implement blitting for speed.
             # There is a weird delay when re-initialising the graphing, need to hunt that down.
@@ -204,34 +283,15 @@ class MainUI:
                     self.forceAxis.plot(self.forceData, color='blue')
                     self.lengthAxis.plot(self.lengthData, color='blue')
                     self.signalAxis.plot(self.signalData, color='blue')
-                    # self.otherAxis.plot(self.otherData, color='blue')
-                    # fxlim = np.floor((np.arange(len(self.forceData)) + 1) * 1 / PLOT_LENGTH)
-                    # lxlim = np.floor((np.arange(len(self.forceData) - 1) + 1) * 1 / PLOT_LENGTH)
-                    # self.forceAxis.plot(fxlim, self.forceData, color='blue')
-                    # self.lengthAxis.plot(lxlim, self.lengthData, color='blue')
-                    # self.signalAxis.plot(lxlim, self.signalData, color='blue')
-                    # self.forceAxis.set_xlim([fxlim[0], fxlim[-1]])
-                    # self.lengthAxis.set_xlim([lxlim[0], lxlim[-1]])
-                    # self.signalAxis.set_xlim([lxlim[0], lxlim[-1]])
-                    # lastInd = xlim[-1]
-                    # self.forceAxis.set_xticks((np.arange(len(self.forceData), step = 20) + 1) * 1 / PLOT_LENGTH)
-                    # self.lengthAxis.set_xticks((np.arange(len(self.forceData), step = 20) + 1) * 1 / PLOT_LENGTH)
-                    # self.signalAxis.set_xticks((np.arange(len(self.forceData), step = 20) + 1) * 1 / PLOT_LENGTH)
                 else:
-                    self.forceAxis.plot(self.forceData, color='blue')
-                    self.lengthAxis.plot(self.lengthData, color='blue')
-                    self.signalAxis.plot(self.signalData, color='blue')
-                    # self.otherAxis.plot(self.otherData, color='blue')
-                    # xlim = np.floor(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:])) + 1) * 1 / PLOT_LENGTH)
-                    # self.forceAxis.plot(xlim, self.forceData[-PLOT_LENGTH:], color='blue')
-                    # self.lengthAxis.plot(xlim, self.lengthData[-PLOT_LENGTH:], color='blue')
-                    # self.signalAxis.plot(xlim, self.signalData[-PLOT_LENGTH:], color='blue')
-                    # self.forceAxis.set_xlim([xlim[0], xlim[-1]])
-                    # self.lengthAxis.set_xlim([xlim[0], xlim[-1]])
-                    # self.signalAxis.set_xlim([xlim[0], xlim[-1]])
-                    # self.forceAxis.set_xticks(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:]), step = 20) + 1) * 1 / PLOT_LENGTH)
-                    # self.lengthAxis.set_xticks(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:]), step = 20) + 1) * 1 / PLOT_LENGTH)
-                    # self.signalAxis.set_xticks(lastInd + (np.arange(len(self.forceData[-PLOT_LENGTH:]), step = 20) + 1) * 1 / PLOT_LENGTH)
+                    if len(self.forceData) > 100000:
+                        self.forceAxis.plot(self.forceData[(len(self.forceData) - 100000):], color='blue')
+                        self.lengthAxis.plot(self.lengthData[(len(self.lengthData) - 100000):], color='blue')
+                        self.signalAxis.plot(self.signalData[(len(self.signalData) - 100000):], color='blue')
+                    else:
+                        self.forceAxis.plot(self.forceData, color='blue')
+                        self.lengthAxis.plot(self.lengthData, color='blue')
+                        self.signalAxis.plot(self.signalData, color='blue')
                     # lastInd = xlim[-1]
 
                 self.canvas.draw()
@@ -261,7 +321,7 @@ class MainUI:
         global shouldPlotContinue
         global streamStopper
         streamStopper = 0 # To stop the streaming/thread.
-        self.signalButton.state(["disabled"])
+        self.startButton.state(["disabled"])
 
         print('Starting data stream...')
 
@@ -329,7 +389,7 @@ class MainUI:
         initCheck = 0 # Reset initial check for plotting
         shouldPlotContinue = 0 # Stop plotting
         self.streamThread.join()
-        self.signalButton.state(["!disabled"])
+        self.startButton.state(["!disabled"])
 
     # Function to send signal to the motors, generalised such that it can send a signal to either the stage motor (SM) or force motor (FM).
     def sendSignal(self):
@@ -337,7 +397,7 @@ class MainUI:
         # NEED TO ADD CONVERSION FROM/TO mm HERE. WHAT V = WHAT mm?
         print("Sending Signal")
         CONST_YELLOW = 3.8
-        PULSE_LENGTH = float(self.pulLen.get())
+        PULSE_LENGTH = float(self.pulTime.get())
         nSteps = int(self.nRises.get())
         STRETCH_LENGTH = float(self.disMove.get()) # eventually needs to be lengthChange * self.LengthToVolts
         stepNum = 1
@@ -374,10 +434,16 @@ class MainUI:
 
     # Finally, an export function to write the data from streaming to the disk.
     def exportData(self):
-        outputArray = zip(self.forceData, self.lengthData, self.signalData, np.arrange(len(self.forceData))*1/self.SCAN_FREQUENCY)
+        n = int(self.exportPoints.get())
+        forceOutput = self.forceData[0::n]
+        lengthOutput = self.lengthData[0::n]
+        signalOutput = self.signalData[0::n]
+        time = np.arange(len(self.forceData))*1/self.SCAN_FREQUENCY
+        timeOutput = time[0::n]
+        outputArray = zip(timeOutput, self.forceData, self.lengthData, self.signalData)
         if not os.path.exists('./outputs'):
                 os.makedirs('./outputs')
-        with open("./outputs/output.csv", "w", newline = "") as f:
+        with open("./outputs/" + self.exportName.get() + ".csv", "w", newline = "") as f:
             writer = csv.writer(f)
             writer.writerows(outputArray)
             f.flush()
