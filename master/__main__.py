@@ -1,4 +1,3 @@
-import math  # For sin
 import struct
 import sys  # For version_info and platform
 import time  # For sleep, clock, time and perf_counter
@@ -7,18 +6,14 @@ import csv
 from datetime import datetime  # For printing times with now
 import scipy
 from functools import partial
-from datetime import datetime
 from tkinter import *
 from tkinter import ttk
 from tkinter import messagebox
 import matplotlib
 matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import ( FigureCanvasTkAgg, NavigationToolbar2Tk )
-from matplotlib.backend_bases import key_press_handler
 import numpy as np
-import queue
 import threading
 try:
     import LabJackPython
@@ -41,7 +36,6 @@ class MainUI:
         global initCheck
         global lastInd
         global shouldPlotContinue
-        plotCounter = 0
         initCheck = 0
         shouldPlotContinue = 1
         # Initialise data in memory
@@ -440,7 +434,7 @@ class MainUI:
         signalOutput = self.signalData[0::n]
         time = np.arange(len(self.forceData))*1/self.SCAN_FREQUENCY
         timeOutput = time[0::n]
-        outputArray = zip(timeOutput, self.forceData, self.lengthData, self.signalData)
+        outputArray = zip(timeOutput, forceOutput, lengthOutput, signalOutput)
         if not os.path.exists('./outputs'):
                 os.makedirs('./outputs')
         with open("./outputs/" + self.exportName.get() + ".csv", "w", newline = "") as f:
