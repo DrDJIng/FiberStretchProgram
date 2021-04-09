@@ -58,7 +58,7 @@ class MainUI:
         self.forceData = []
         self.lengthData = []
         self.signalData = []
-        self.otherData = []
+        self.Notations = []
         self.checkDataF = []
         self.checkDataL = []
         self.U6device = u6.U6()
@@ -91,6 +91,7 @@ class MainUI:
         exName = StringVar()
         exPoints = StringVar()
         SCAN_FREQUENCY = StringVar()
+        Notation = StringVar()
 
         # There are specifically the axis limits.
         fLimU = StringVar()
@@ -148,6 +149,8 @@ class MainUI:
         # Send a signal to the motor, to initiate motor action
         self.signalButton = ttk.Button(self.signalFrame, text = 'Send signal', command = partial(self.startNewThread, self.sendSignal))
         self.signalButton.grid(column = 0, row = 2, pady = 10)
+        self.signalSignal = ttk.Label(self.signalFrame, text = ' ')
+        self.signalSignal.grid(column = 1, row = 2)
         self.startButton = ttk.Button(self.signalFrame, text = 'Start measuring', command = partial(self.startNewThread, self.startStream))
         self.startButton.grid(column = 0, row = 3, pady = 10)
         self.stopButton = ttk.Button(self.signalFrame, text = 'Stop measuring', command = self.stopStream)
@@ -167,8 +170,22 @@ class MainUI:
         self.exportPoints = ttk.Entry(self.exportFrame, textvariable = exPoints, width = 3, justify = CENTER)
         self.exportPoints.grid(column = 1, row = 1)
         self.exportPoints.insert(0, '100')
-        self.exportButton = ttk.Button(self.exportFrame, text = 'Export data', command = partial(self.exportData, self.exportName.get()))
+        self.exportButton = ttk.Button(self.exportFrame, text = 'Export data', command = partial(self.exportData, False))
         self.exportButton.grid(column = 1, row = 2)
+        self.exportSignal = ttk.Label(self.exportFrame, text = ' ')
+        self.exportSignal.grid(column = 1, row = 3)
+
+        # Notation buttons
+        self.NotateFrame = ttk.Frame(self.settingsFrame)
+        self.NotateFrame.grid(column = 2, row = 0)
+        self.notateLabel = ttk.Label(self.NotateFrame, text = 'Add notation:  ')
+        self.notateLabel.grid(column = 0, row = 0)
+        self.notateNotate = ttk.Entry(self.NotateFrame, textvariable = Notation)
+        self.notateNotate.grid(column = 1, row = 0)
+        self.notateButton = ttk.Button(self.NotateFrame, text = 'Add', command = self.addNotation)
+        self.notateButton.grid(column = 2, row = 0)
+        self.notateSignal = ttk.Label(self.NotateFrame, text = ' ')
+        self.notateSignal.grid(column = 2, row = 1)
 
         # Calibration buttons  # Do these actually do anything (yes, eventually)
         self.calibrateFrame = ttk.Frame(self.settingsFrame)
@@ -423,8 +440,6 @@ class MainUI:
 
                     #queue.put(self.forceData = self.forceData + [self.forceCalibration * i for i in r["AIN0"]])
 
-                    # self.otherData = self.otherData + r["AIN3"]
-
                     dataCount += 1
                     packetCount += r['numPackets']
 
@@ -451,7 +466,6 @@ class MainUI:
         shouldPlotContinue = 0 # Stop plotting
         self.streamThread.join()
         self.autoSave.join()
-        self.exportData('autoSave')
         self.startButton.state(["!disabled"])
 
     # Function to send signal to the motors, generalised such that it can send a signal to either the stage motor (SM) or force motor (FM).
@@ -460,7 +474,8 @@ class MainUI:
 
         # Set voltages, then after sleep, reset to 0.
         # NEED TO ADD CONVERSION FROM/TO mm HERE. WHAT V = WHAT mm?
-        print("Sending Signal")
+        self.signalSignal['text'] = "Signal sent!"
+        self.signalButton.state(["disabled"])
         CONST_YELLOW = 5
         PULSE_LENGTH = float(self.pulTime.get())
         STRETCH_LENGTH = float(self.disMove.get()) # eventually needs to be lengthChange * self.LengthToVolts
@@ -492,14 +507,25 @@ class MainUI:
             # self.U3device.getFeedback(u3.DAC0_8(RELAX))
             self.U3device.getFeedback(u3.DAC1_8(DEACTIVATE))
 
+            self.signalButton.state(["!disabled"])
+            self.signalSignal['text'] = ' '
 
 
-
-
+    def addNotation(self):
+        notation = self.notateNotate.get()
+        time = len(self.forceData[:]) * 1 / float(self.SCAN_FREQUENCY.get())
+        self.Notations.append([notation, time])
+        self.notateSignal['text'] = 'Notation added!'
+        self.NotateFrame.update()
+        self.NotateFrame.after(1000, self.clear_labels)
 
     # Finally, an export function to write the data from streaming to the disk.
-    def exportData(self, fileName):
+    def exportData(self, isAutoSave):
 
+        if isAutoSave:
+            fileName = "autosave"
+        else:
+            fileName = self.exportName.get()
 
         # Often we don't need every point, so give option to truncate data
         n = int(self.exportPoints.get())
@@ -508,13 +534,16 @@ class MainUI:
         forceOutput = self.forceData[0::n]
         lengthOutput = self.lengthData[0::n]
         signalOutput = self.signalData[0::n]
+        notations = [[] for point in forceOutput]
+        for i in range(0, len(self.Notations)):
+            notations[i] = self.Notations[i]
 
         # Get that time data yo
         time = np.arange(len(self.forceData))*1/float(self.SCAN_FREQUENCY.get())
         timeOutput = time[0::n]
 
         # Create our output in a nice array
-        outputArray = zip(timeOutput, forceOutput, lengthOutput, signalOutput)
+        outputArray = zip(timeOutput, forceOutput, lengthOutput, signalOutput, notations)
 
         # If output folder does not exist, make it
         if not os.path.exists('./outputs'):
@@ -525,6 +554,15 @@ class MainUI:
             writer.writerows(outputArray)
             f.flush()
 
+        self.exportSignal['text'] = "Exported!"
+        self.exportFrame.update()
+        self.exportFrame.after(1000, self.clear_labels) # Don't be a silly person like me, and call this as a function. Then it calls the function every single call, and the program hangs! Funny.
+
+    def clear_labels(self):
+        print("Got here")
+        self.exportSignal['text'] = ' '
+        self.notateSignal['text'] = ' '
+
     def autoSaver (self):
         global streamStopper
 
@@ -532,8 +570,8 @@ class MainUI:
         # After 300 seconds, autoSave.
         while (True):
             time.sleep(0.25)
-            if iterator == 2:
-                self.exportData('autoSave')
+            if iterator == 59:
+                self.exportData(True)
                 iterator = 0
             else:
                 iterator += 0.25
@@ -572,19 +610,6 @@ class MainUI:
             with open("./calibration.txt", "w", newline = "") as f:
                 f.writelines(calibrationOutput)
                 f.flush()
-
-    # This function will move the stage
-    def moveStage(self, direction):
-
-        # NEED TO ADD CONVERSION FROM/TO mm HERE. WHAT V = WHAT mm?
-        self.setVoltage(direction)
-        time.sleep(0.001)
-        # NEED TO ADD CONVERSION FROM/TO mm HERE. WHAT V = WHAT mm?
-        self.setVoltage(0)
-        if direction == 1:
-            print('Moving stage forward')
-        else:
-            print('Moving stage backward')
 
     def toDouble(self, buff):
         """Converts the 8 byte array into a floating point number.

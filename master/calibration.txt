@@ -1,1 +1,1 @@
-Calibration: 1.0 muN/g
+Calibration: 5.0 muN/g
