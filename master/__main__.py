@@ -2,6 +2,7 @@ import struct
 import sys  # For version_info and platform
 import time  # For sleep, clock, time and perf_counter
 import os
+import re
 import csv
 from datetime import datetime  # For printing times with now
 import scipy
@@ -31,7 +32,12 @@ class MainUI:
     def __init__(self):
         print(os.path.dirname(os.path.realpath(__file__)))
         # LOAD CALIBRATION FROM FILE
-        self.forceCalibration = 1
+        if os.path.exists("./calibration.txt"):
+            File = open("./calibration.txt", 'r')
+            self.forceCalibration = float(''.join(re.findall('[0-9]+.[0-9]+', File.read())))
+            print("Calibration is %s muN/g" % self.forceCalibration)
+        else:
+            self.forceCalibration = 1
         # Set scan frequency to 2x double what we want actual frequency to be at. Could probably do this non-stream, but two channels at 100Hz feels like a streaming problem to me.  Attach to an editable field at some point.
         self.defaultFrequency = 1000 # Default frequency to input for streaming
 
@@ -164,17 +170,17 @@ class MainUI:
         self.exportButton = ttk.Button(self.exportFrame, text = 'Export data', command = partial(self.exportData, self.exportName.get()))
         self.exportButton.grid(column = 1, row = 2)
 
-        # Calibration buttons  # Do these actually do anything???
+        # Calibration buttons  # Do these actually do anything (yes, eventually)
         self.calibrateFrame = ttk.Frame(self.settingsFrame)
         self.calibrateFrame.grid(column = 4, row = 0)
         self.calibrateButton = ttk.Button(self.calibrateFrame, text = 'Calibrate', command = self.setCalibration)
         self.calibrateButton.grid(column = 1, row = 2)
-        self.calWeight = ttk.Entry(self.calibrateFrame, textvariable = calWeight, width = 3, justify = CENTER)
+        self.calWeight = ttk.Entry(self.calibrateFrame, textvariable = calWeight, width = 12, justify = CENTER)
         self.calWeight.grid(column = 1, row = 0)
-        self.calWeight.insert(0, '3')
-        self.calForce = ttk.Entry(self.calibrateFrame, textvariable = calForce, width = 3, justify = CENTER)
+        self.calWeight.insert(0, 'Weight (g)')
+        self.calForce = ttk.Entry(self.calibrateFrame, textvariable = calForce, width = 12, justify = CENTER)
         self.calForce.grid(column = 1, row = 1)
-        self.calForce.insert(0, '2')
+        self.calForce.insert(0, 'Force (muN)')
 
         ###### Plot frames
         self.plotFrame = ttk.Frame(self.mainFrame)
@@ -190,7 +196,7 @@ class MainUI:
         # Might need to move entire figure creation, etc, into the thread so that it can be accessed properly? Not sure.
         self.plotFig = Figure(figsize=(15.8, 7.2), dpi = 100) # Have to take into account the DPI to set the inch sizes here. 100 dpi = 19.2 inches for a typical 1920x1080 screen.
         self.forceAxis = self.plotFig.add_subplot(3, 1, 1)
-        self.forceAxis.set_ylabel('Force (N???)')
+        self.forceAxis.set_ylabel('Force (N)')
         self.lengthAxis = self.plotFig.add_subplot(3, 1, 2)
         self.lengthAxis.set_ylabel('Length (1e-6 m)')
         self.signalAxis = self.plotFig.add_subplot(3, 1, 3)
@@ -285,7 +291,7 @@ class MainUI:
             self.lengthAxis.clear()
             self.signalAxis.clear()
 
-            self.forceAxis.set_ylabel('Force (N???)')
+            self.forceAxis.set_ylabel('Force (N)')
             self.lengthAxis.set_ylabel('Length (1e-6 m)')
             self.signalAxis.set_ylabel('Signal (V)')
 
@@ -358,7 +364,7 @@ class MainUI:
         plotAxis.set_xlim([xlim[0], xlim[-1]])
         stepper = round(len(self.forceData)/20)
         plotAxis.set_xticks(np.arange(len(plotData), step = stepper) * 1 / float(self.SCAN_FREQUENCY.get()))
-        self.forceAxis.set_ylabel('Force (N???)')
+        self.forceAxis.set_ylabel('Force (N)')
         self.lengthAxis.set_ylabel('Length (1e-6 m)')
         self.signalAxis.set_ylabel('Signal (V)')
 
@@ -372,6 +378,9 @@ class MainUI:
         print('Starting data stream...')
 
         print("Configuring U6 stream")
+
+        if float(self.SCAN_FREQUENCY.get()) < 1 or float(self.SCAN_FREQUENCY.get()) > 1000:
+            messagebox.showerror("Warning!", "Note: Scanning frequency works best between 1 Hz and 1000 Hz, and may not work properly outside of this range.")
 
         # Set up the stream from Labjack U6
         self.U6device.streamConfig(NumChannels=3, ChannelNumbers=[0, 1, 2], ChannelOptions=[0, 0, 0], SettlingFactor=1, ResolutionIndex=4, ScanFrequency=float(self.SCAN_FREQUENCY.get()))
@@ -452,7 +461,7 @@ class MainUI:
         # Set voltages, then after sleep, reset to 0.
         # NEED TO ADD CONVERSION FROM/TO mm HERE. WHAT V = WHAT mm?
         print("Sending Signal")
-        CONST_YELLOW = 3.8
+        CONST_YELLOW = 5
         PULSE_LENGTH = float(self.pulTime.get())
         STRETCH_LENGTH = float(self.disMove.get()) # eventually needs to be lengthChange * self.LengthToVolts
         stepNum = 1
@@ -470,10 +479,10 @@ class MainUI:
             DEACTIVATE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
 
             if lastDis != STRETCH_LENGTH:
-                pause = 5
+                pause = 4
                 lastDis = STRETCH_LENGTH
             else:
-                pause = 0.5
+                pause = 0.05
             self.U3device.getFeedback(u3.DAC0_8(STRETCH))
             time.sleep(pause)
             self.U3device.getFeedback(u3.DAC1_8(ACTIVATE))
@@ -533,18 +542,36 @@ class MainUI:
 
     # Need a function to set the calibration of the voltages we're getting from the force transducer.
     def setCalibration(self):
-        # IF CALIBRATION DOESN'T EXIST
-        POINT1 = [0,0]
-        y1 = POINT1[0]
-        x1 = POINT1[1]
+        letterChecker = False
 
-        POINT2 = [int(self.calForce.get()), int(self.calWeight.get())]
-        y2 = POINT2[0]
-        x2 = POINT2[1]
+        for letter in self.calWeight.get():
+            letterChecker = letter.isalpha()
+            if letterChecker:
+                break
 
-        self.forceCalibration = (y2-y1)/(x2-x1)
+        if not letterChecker:
+            for letter in self.calForce.get():
+                letterChecker = letter.isalpha()
+                if letterChecker:
+                    break
 
-        print('Setting calibration...')
+        if letterChecker:
+            messagebox.showerror("Calibration error", ''' Inputs must be numbers ''')
+        else:
+            POINT1 = [0,0]
+            y1 = POINT1[0]
+            x1 = POINT1[1]
+
+            POINT2 = [float(self.calForce.get()), float(self.calWeight.get())]
+            y2 = POINT2[0]
+            x2 = POINT2[1]
+
+            self.forceCalibration = (y2-y1)/(x2-x1)
+            print('Setting calibration...')
+            calibrationOutput = ["Calibration: ", str(self.forceCalibration), " muN/g"]
+            with open("./calibration.txt", "w", newline = "") as f:
+                f.writelines(calibrationOutput)
+                f.flush()
 
     # This function will move the stage
     def moveStage(self, direction):
