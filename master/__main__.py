@@ -403,10 +403,13 @@ class MainUI:
                         print("+++ Missed %s" % r["missed"])
 
                     # Update y-axis data to plot, auto-axis should keep it within range
-                    updateData = r["AIN0"]
-                    # Append onto all data, for export later
-                    self.forceData = self.forceData + [self.forceCalibration * i for i in r["AIN0"]]
-                    self.lengthData = self.lengthData + r["AIN1"]
+                    if "AIN0" in r:
+                        updateData = r["AIN0"]
+                        # Append onto all data, for export later
+                        self.forceData = self.forceData + [self.forceCalibration * i for i in r["AIN0"]]
+                    if "AIN1" in r:
+                        self.lengthData = self.lengthData + r["AIN1"]
+                    if "AIN2" in r:
                     self.signalData = self.signalData + r["AIN2"]
 
                     #queue.put(self.forceData = self.forceData + [self.forceCalibration * i for i in r["AIN0"]])
