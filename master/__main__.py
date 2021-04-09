@@ -62,8 +62,6 @@ class MainUI:
 
         # self.setLJTick()
         self.startUI()
-        self.listenThread = threading.Thread(target = self.checkForAnnotation)
-        self.listenThread.start()
 
     def startUI(self):
 
@@ -410,7 +408,7 @@ class MainUI:
                     if "AIN1" in r:
                         self.lengthData = self.lengthData + r["AIN1"]
                     if "AIN2" in r:
-                    self.signalData = self.signalData + r["AIN2"]
+                        self.signalData = self.signalData + r["AIN2"]
 
                     #queue.put(self.forceData = self.forceData + [self.forceCalibration * i for i in r["AIN0"]])
 
@@ -442,6 +440,7 @@ class MainUI:
         shouldPlotContinue = 0 # Stop plotting
         self.streamThread.join()
         self.autoSave.join()
+        self.exportData('autoSave')
         self.startButton.state(["!disabled"])
 
     # Function to send signal to the motors, generalised such that it can send a signal to either the stage motor (SM) or force motor (FM).
@@ -451,7 +450,6 @@ class MainUI:
         print("Sending Signal")
         CONST_YELLOW = 3.8
         PULSE_LENGTH = float(self.pulTime.get())
-        nSteps = int(self.nRises.get())
         STRETCH_LENGTH = float(self.disMove.get()) # eventually needs to be lengthChange * self.LengthToVolts
         stepNum = 1
 
@@ -462,30 +460,27 @@ class MainUI:
             "Stretch length must be between 0 and 3.5 mm.\n(%s)" % STRETCH_LENGTH)
         else:
             # Set motor voltage to appropriate stretch length voltage
-            DAC0_VALUE = self.U3device.voltageToDACBits(STRETCH_LENGTH, dacNumber = 1, is16Bits = False)
-            self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
-            # Sleep slightly to ensure that the voltage is set
-            time.sleep(0.2)
-            # Set CONST_YELLOW to 3.8, this will initiate motor movement
-            DAC1_VALUE = self.U3device.voltageToDACBits(CONST_YELLOW, dacNumber = 1, is16Bits = False)
-            self.U3device.getFeedback(u3.DAC1_8(DAC1_VALUE))
+            STRETCH = self.U3device.voltageToDACBits(STRETCH_LENGTH, dacNumber = 1, is16Bits = False)
+            RELAX = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
+            ACTIVATE = self.U3device.voltageToDACBits(CONST_YELLOW, dacNumber = 1, is16Bits = False)
+            DEACTIVATE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
+
+
+            self.U3device.getFeedback(u3.DAC0_8(STRETCH))
+            time.sleep(0.5)
+            self.U3device.getFeedback(u3.DAC1_8(ACTIVATE))
             # Wait for the pulse time
             time.sleep(PULSE_LENGTH)
             # Set motor to 0, so no stretch initiated.
-            DAC0_VALUE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
-            self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
-            # Sleep slightly to ensure that the voltage is set
-            time.sleep(0.5)
-            # Set yellow const to 0, this will move motor back to 0 position.
-            DAC1_VALUE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
-            self.U3device.getFeedback(u3.DAC1_8(DAC1_VALUE))
+            self.U3device.getFeedback(u3.DAC0_8(RELAX))
+            self.U3device.getFeedback(u3.DAC1_8(DEACTIVATE))
 
 
 
     # Finally, an export function to write the data from streaming to the disk.
     def exportData(self, fileName):
 
-        print("Got here")
+
         # Often we don't need every point, so give option to truncate data
         n = int(self.exportPoints.get())
 
@@ -515,14 +510,15 @@ class MainUI:
 
         iterator = 0
         # After 300 seconds, autoSave.
-        while (not streamStopper):
-            time.sleep(1)
-            if iterator == 299:
+        while (True):
+            time.sleep(0.25)
+            if iterator == 2:
                 self.exportData('autoSave')
                 iterator = 0
             else:
-                iterator += 1
-        self.exportData('autoSave')
+                iterator += 0.25
+            if streamStopper:
+                break
 
     # Need a function to set the calibration of the voltages we're getting from the force transducer.
     def setCalibration(self):
