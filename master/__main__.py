@@ -40,11 +40,13 @@ class MainUI:
         global lastInd
         global shouldPlotContinue
         global takeAnnotation
+        global lastDis
 
         # Initialising some checks
         initCheck = 0
         shouldPlotContinue = 1
         takeAnnotation = 0
+        lastDis = 0
 
         # Initialise data in memory
         self.forceData = []
@@ -445,6 +447,8 @@ class MainUI:
 
     # Function to send signal to the motors, generalised such that it can send a signal to either the stage motor (SM) or force motor (FM).
     def sendSignal(self):
+        global lastDis
+
         # Set voltages, then after sleep, reset to 0.
         # NEED TO ADD CONVERSION FROM/TO mm HERE. WHAT V = WHAT mm?
         print("Sending Signal")
@@ -465,15 +469,22 @@ class MainUI:
             ACTIVATE = self.U3device.voltageToDACBits(CONST_YELLOW, dacNumber = 1, is16Bits = False)
             DEACTIVATE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
 
-
+            if lastDis != STRETCH_LENGTH:
+                pause = 5
+                lastDis = STRETCH_LENGTH
+            else:
+                pause = 0.5
             self.U3device.getFeedback(u3.DAC0_8(STRETCH))
-            time.sleep(0.5)
+            time.sleep(pause)
             self.U3device.getFeedback(u3.DAC1_8(ACTIVATE))
             # Wait for the pulse time
             time.sleep(PULSE_LENGTH)
             # Set motor to 0, so no stretch initiated.
-            self.U3device.getFeedback(u3.DAC0_8(RELAX))
+            # self.U3device.getFeedback(u3.DAC0_8(RELAX))
             self.U3device.getFeedback(u3.DAC1_8(DEACTIVATE))
+
+
+
 
 
 
@@ -615,7 +626,7 @@ class MainUI:
             finally:
                 self.root.quit()
                 self.root.destroy()
-                sys.quit()
+                sys.exit()
 
 if __name__ == '__main__':
     MainUI()
