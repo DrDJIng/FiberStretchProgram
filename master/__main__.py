@@ -8,19 +8,18 @@ import scipy
 from functools import partial
 from tkinter import *
 from tkinter import ttk
-import tkinter.messagebox
+from tkinter import messagebox
 import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import ( FigureCanvasTkAgg, NavigationToolbar2Tk )
 import numpy as np
 import threading
-import keyboard
 try:
-    # import LabJackPython
-    # import u6
-    # import u3
-    import testsuite
+    import LabJackPython
+    import u6
+    import u3
+    # import testsuite
 except:
     messagebox.showerror("Driver error", '''The driver could not be imported.
 # Please install the UD driver (Windows) or Exodriver (Linux and Mac OS X) from www.labjack.com''')
@@ -35,18 +34,18 @@ class MainUI:
         self.forceCalibration = 1
         # Set scan frequency to 2x double what we want actual frequency to be at. Could probably do this non-stream, but two channels at 100Hz feels like a streaming problem to me.  Attach to an editable field at some point.
         self.defaultFrequency = 1000 # Default frequency to input for streaming
-        
+
         # Global nastiness, but couldn't think of better way to do this across threads.
         global initCheck
         global lastInd
         global shouldPlotContinue
         global takeAnnotation
-        
+
         # Initialising some checks
         initCheck = 0
         shouldPlotContinue = 1
         takeAnnotation = 0
-        
+
         # Initialise data in memory
         self.forceData = []
         self.lengthData = []
@@ -54,29 +53,29 @@ class MainUI:
         self.otherData = []
         self.checkDataF = []
         self.checkDataL = []
-        self.U6device = testsuite.U6()
+        self.U6device = u6.U6()
         self.U6device.getCalibrationData()
-        self.U3device = testsuite.U3()
-        
+        self.U3device = u3.U3()
+
         # For applying the proper calibration to readings.
         self.U3device.getCalibrationData()
-        
+
         # self.setLJTick()
         self.startUI()
         self.listenThread = threading.Thread(target = self.checkForAnnotation)
         self.listenThread.start()
 
     def startUI(self):
-        
+
         # Set up UI system.
         self.root = Tk() # Need a base canvas to draw the UI on
         self.root.state('zoomed') # Get rid of nasty borders
         self.root.title("Force measurements") # Name the window
-        
+
         # Configure the grid
         Grid.rowconfigure(self.root, 0, weight = 1)
         Grid.columnconfigure(self.root, 0, weight = 1)
-        
+
         # Initiate our string variables for tk Entry functions.
         numRises = StringVar()
         disMove = StringVar()
@@ -86,7 +85,7 @@ class MainUI:
         exName = StringVar()
         exPoints = StringVar()
         SCAN_FREQUENCY = StringVar()
-        
+
         # There are specifically the axis limits.
         fLimU = StringVar()
         fLimD = StringVar()
@@ -113,7 +112,7 @@ class MainUI:
         # Create buttons and place them in the setting frame.
         self.signalSetsFrame = ttk.Frame(self.settingsFrame)
         self.signalSetsFrame.grid(column = 0, row = 0)
-        
+
         #### Signal options
         # To move the motor
         self.moveLabel = ttk.Label(self.signalSetsFrame, text = 'Move distance (mm)')
@@ -121,7 +120,7 @@ class MainUI:
         self.disMove = ttk.Entry(self.signalSetsFrame, textvariable = disMove, width = 5, justify = CENTER)
         self.disMove.grid(column = 1, row = 0)
         self.disMove.insert(0, '1')
-        
+
         # Set stretch / slack time
         self.timeLabel = ttk.Label(self.signalSetsFrame, text = 'Pulse length (s)')
         self.timeLabel.grid(column = 0, row = 1)
@@ -132,14 +131,14 @@ class MainUI:
         ##### Create buttons and place them in the signal frame.
         self.signalFrame = ttk.Frame(self.settingsFrame)
         self.signalFrame.grid(column = 1, row = 0)
-        
+
         # We want to be able to set the frequency of measurement
         self.frequencyLabel = ttk.Label(self.signalFrame, text = "Frequency set to: ")
         self.frequencyLabel.grid(column = 0, row = 0)
         self.SCAN_FREQUENCY = ttk.Entry(self.signalFrame, textvariable = SCAN_FREQUENCY, width = 5, justify = CENTER)
         self.SCAN_FREQUENCY.grid(column = 1, row = 0)
         self.SCAN_FREQUENCY.insert(0, str(self.defaultFrequency))
-        
+
         # Send a signal to the motor, to initiate motor action
         self.signalButton = ttk.Button(self.signalFrame, text = 'Send signal', command = partial(self.startNewThread, self.sendSignal))
         self.signalButton.grid(column = 0, row = 2, pady = 10)
@@ -147,14 +146,6 @@ class MainUI:
         self.startButton.grid(column = 0, row = 3, pady = 10)
         self.stopButton = ttk.Button(self.signalFrame, text = 'Stop measuring', command = self.stopStream)
         self.stopButton.grid(column = 0, row = 4, pady = 10)
-
-        # Stage buttons NOTE: These doesn't do anything.
-        self.stageFrame = ttk.Frame(self.settingsFrame)
-        self.stageFrame.grid(column = 2, row = 0)
-        self.stageForwardButton = ttk.Button(self.stageFrame, text = 'Stage forward', command = partial(self.moveStage, 1))
-        self.stageForwardButton.grid(column = 1, row = 2)
-        self.stageBackwardButton = ttk.Button(self.stageFrame, text = 'Stage back', command = partial(self.moveStage, -1))
-        self.stageBackwardButton.grid(column = 2, row = 2)
 
         ##### Other buttons
         # Export the data using these
@@ -184,7 +175,7 @@ class MainUI:
         self.calForce = ttk.Entry(self.calibrateFrame, textvariable = calForce, width = 3, justify = CENTER)
         self.calForce.grid(column = 1, row = 1)
         self.calForce.insert(0, '2')
-        
+
         ###### Plot frames
         self.plotFrame = ttk.Frame(self.mainFrame)
         self.plotFrame.grid(column = 0, row = 0, sticky = (N, S, E, W))
@@ -230,7 +221,7 @@ class MainUI:
         self.fLimDown = ttk.Entry(self.limFrame, textvariable = fLimD, width = 3, justify = CENTER)
         self.fLimDown.grid(column = 0, row = 1)
         self.fLimDown.insert(0, '-1')
-        
+
         # Length axis limits
         self.lLimUp = ttk.Entry(self.limFrame, textvariable = lLimU, width = 3, justify = CENTER)
         self.lLimUp.grid(column = 0, row = 2)
@@ -238,7 +229,7 @@ class MainUI:
         self.lLimDown = ttk.Entry(self.limFrame, textvariable = lLimD, width = 3, justify = CENTER)
         self.lLimDown.grid(column = 0, row = 3)
         self.lLimDown.insert(0, '0')
-        
+
         # Signal axis limits
         self.sLimUp = ttk.Entry(self.limFrame, textvariable = sLimU, width = 3, justify = CENTER)
         self.sLimUp.grid(column = 0, row = 4)
@@ -261,7 +252,7 @@ class MainUI:
     # Function to start a new threads
     def startNewThread(self, funcname):
         global shouldPlotContinue
-        
+
         # If we want to start streaming plottable data
         if funcname == self.startStream:
             self.streamThread = threading.Thread(target = funcname)
@@ -279,20 +270,24 @@ class MainUI:
         global lastInd
         global shouldPlotContinue
         global takeAnnotation
-        
+
         if takeAnnotation:
             annotation = simpledialog.askstring("Annotate", "What is annotation?", parent = self.root)
-        
+
         #fdata = queue.get(self.forcedata)
-        
+
         # Set plot length
-        PLOT_LENGTH = round(self.SCAN_FREQUENCY.get() / 2)
+        PLOT_LENGTH = round(float(self.SCAN_FREQUENCY.get()) / 2)
         if len(self.forceData) > 0:
-            
+
             # Clear our axes, so that the plot will update
             self.forceAxis.clear()
             self.lengthAxis.clear()
             self.signalAxis.clear()
+
+            self.forceAxis.set_ylabel('Force (N???)')
+            self.lengthAxis.set_ylabel('Length (1e-6 m)')
+            self.signalAxis.set_ylabel('Signal (V)')
 
             # Get the axis limits from the tkEntrys
             fU = self.fLimUp.get()
@@ -301,7 +296,7 @@ class MainUI:
             lD = self.lLimDown.get()
             sU = self.sLimUp.get()
             sD = self.sLimDown.get()
-            
+
             # Have some default values in case people try to change limits as we're trying to update the plot
             if not fU or not fD or not lU or not lD or not sU or not sD:
                 self.forceAxis.set_ylim([-1, 10]) # Set the y-axis limits to -10 and 10, the range of the transducer (might actually be -5 to 5, need to check).
@@ -317,7 +312,7 @@ class MainUI:
                 self.forceAxis.set_ylim([fD, fU]) # Set the y-axis limits to -10 and 10, the range of the transducer (might actually be -5 to 5, need to check).
                 self.lengthAxis.set_ylim([lD, lU])
                 self.signalAxis.set_ylim([sD, sU])
-                
+
             # Check to see if data has changed. Will need to come up with better way to do this if / when memory becomes an issue.
             # I think I can do this using queueing, which I should implement. Also implement blitting for speed.
             # There is a weird delay when re-initialising the graphing, need to hunt that down.
@@ -329,7 +324,7 @@ class MainUI:
                     self.signalAxis.plot(self.signalData, color='blue')
                 ############# CHECK TO SEE IF THIS WORKS
                 else: # Only show the latest 100000 points on the plots.
-                
+
                     if len(self.forceData) > 100000:
                         self.forceAxis.plot(self.forceData[-100000:], color='blue')
                         self.lengthAxis.plot(self.lengthData[-100000:], color='blue')
@@ -358,32 +353,14 @@ class MainUI:
     def endPlot(self, plotAxis, plotData):
         # Reproduce accidental cool result by plotting all plots on their full scale
         plotAxis.clear()
-        xlim = np.arange(len(plotData)) * 1 / self.SCAN_FREQUENCY.get()
+        xlim = np.arange(len(plotData)) * 1 / float(self.SCAN_FREQUENCY.get())
         plotAxis.plot(xlim, plotData, color='blue')
         plotAxis.set_xlim([xlim[0], xlim[-1]])
         stepper = round(len(self.forceData)/20)
-        plotAxis.set_xticks(np.arange(len(plotData), step = stepper) * 1 / self.SCAN_FREQUENCY.get())
-    
-    def checkForAnnotation(self):
-        global takeAnnotation
-        # ON NEW THREAD
-        # Watch for spacebar press
-        checkKey = 0
-        while checkKey == 0:
-            try:
-                if keyboard.is_pressed('space'):
-                    takeAnnotation = 1
-                    continue
-                else:
-                    pass
-            except:
-                continue
-        # Get current timestamp
-        # Bring up dialog box for annotation input
-        # Draw vertical line on graph
-        # Store annotation in string array
-        # Shunt string array to export function
-    
+        plotAxis.set_xticks(np.arange(len(plotData), step = stepper) * 1 / float(self.SCAN_FREQUENCY.get()))
+        self.forceAxis.set_ylabel('Force (N???)')
+        self.lengthAxis.set_ylabel('Length (1e-6 m)')
+        self.signalAxis.set_ylabel('Signal (V)')
 
     # Set up the LabJack and start the streaming process
     def startStream(self):
@@ -397,7 +374,7 @@ class MainUI:
         print("Configuring U6 stream")
 
         # Set up the stream from Labjack U6
-        self.U6device.streamConfig(NumChannels=3, ChannelNumbers=[0, 1, 2], ChannelOptions=[0, 0, 0], SettlingFactor=1, ResolutionIndex=4, ScanFrequency=self.SCAN_FREQUENCY.get())
+        self.U6device.streamConfig(NumChannels=3, ChannelNumbers=[0, 1, 2], ChannelOptions=[0, 0, 0], SettlingFactor=1, ResolutionIndex=4, ScanFrequency=float(self.SCAN_FREQUENCY.get()))
         while streamStopper == 0:
             print("Start stream")
             self.U6device.streamStart()
@@ -431,9 +408,9 @@ class MainUI:
                     self.forceData = self.forceData + [self.forceCalibration * i for i in r["AIN0"]]
                     self.lengthData = self.lengthData + r["AIN1"]
                     self.signalData = self.signalData + r["AIN2"]
-                    
+
                     #queue.put(self.forceData = self.forceData + [self.forceCalibration * i for i in r["AIN0"]])
-                    
+
                     # self.otherData = self.otherData + r["AIN3"]
 
                     dataCount += 1
@@ -485,7 +462,7 @@ class MainUI:
             DAC0_VALUE = self.U3device.voltageToDACBits(STRETCH_LENGTH, dacNumber = 1, is16Bits = False)
             self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
             # Sleep slightly to ensure that the voltage is set
-            time.sleep(0.2) 
+            time.sleep(0.2)
             # Set CONST_YELLOW to 3.8, this will initiate motor movement
             DAC1_VALUE = self.U3device.voltageToDACBits(CONST_YELLOW, dacNumber = 1, is16Bits = False)
             self.U3device.getFeedback(u3.DAC1_8(DAC1_VALUE))
@@ -495,31 +472,32 @@ class MainUI:
             DAC0_VALUE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
             self.U3device.getFeedback(u3.DAC0_8(DAC0_VALUE))
             # Sleep slightly to ensure that the voltage is set
-            time.sleep(0.5) 
+            time.sleep(0.5)
             # Set yellow const to 0, this will move motor back to 0 position.
             DAC1_VALUE = self.U3device.voltageToDACBits(0, dacNumber = 1, is16Bits = False)
             self.U3device.getFeedback(u3.DAC1_8(DAC1_VALUE))
-            
-            
+
+
 
     # Finally, an export function to write the data from streaming to the disk.
     def exportData(self, fileName):
-        
+
+        print("Got here")
         # Often we don't need every point, so give option to truncate data
         n = int(self.exportPoints.get())
-        
+
         # Output truncated data to new variables
         forceOutput = self.forceData[0::n]
         lengthOutput = self.lengthData[0::n]
         signalOutput = self.signalData[0::n]
-        
+
         # Get that time data yo
-        time = np.arange(len(self.forceData))*1/self.SCAN_FREQUENCY.get()
+        time = np.arange(len(self.forceData))*1/float(self.SCAN_FREQUENCY.get())
         timeOutput = time[0::n]
-        
+
         # Create our output in a nice array
         outputArray = zip(timeOutput, forceOutput, lengthOutput, signalOutput)
-        
+
         # If output folder does not exist, make it
         if not os.path.exists('./outputs'):
                 os.makedirs('./outputs')
@@ -531,9 +509,9 @@ class MainUI:
 
     def autoSaver (self):
         global streamStopper
-        
+
         iterator = 0
-        # After 300 seconds, autoSave. 
+        # After 300 seconds, autoSave.
         while (not streamStopper):
             time.sleep(1)
             if iterator == 299:
@@ -617,9 +595,9 @@ class MainUI:
 
     # A close function, to stop any active threads in the proper way, close the device, and close the window.
     def close(self):
-        
+
         exitMSG = messagebox.askquestion('Exit Application', 'Are you sure you want to exit?', icon = 'warning')
-        
+
         if exitMSG == 'yes':
             try:
                 self.U6device.streamStop()
@@ -638,6 +616,7 @@ class MainUI:
             finally:
                 self.root.quit()
                 self.root.destroy()
-                
+                sys.quit()
+
 if __name__ == '__main__':
     MainUI()
